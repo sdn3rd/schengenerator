@@ -1,5 +1,7 @@
-import SCHENGEN_BORDERS from './schengen-borders.json' assert { type: 'json' };
-import WORLD_BORDERS from './world-borders.json' assert { type: 'json' };
+// Pre-built flat feature arrays with bboxes computed at build time (fetch-borders.mjs).
+// Importing pre-computed arrays means zero startup CPU cost in the Worker.
+import SCHENGEN_FEATURES from './schengen-features.json' assert { type: 'json' };
+import WORLD_FEATURES from './world-features.json' assert { type: 'json' };
 
 export const SCHENGEN_COUNTRIES = new Set([
   'AT', 'BE', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR', 'HU',
@@ -7,11 +9,9 @@ export const SCHENGEN_COUNTRIES = new Set([
   'PT', 'SK', 'SI', 'ES', 'SE', 'CH',
 ]);
 
-// Names from world borders; Schengen names override where both exist.
-export const COUNTRY_NAMES = {
-  ...Object.fromEntries(WORLD_BORDERS.features.map(f => [f.properties.code, f.properties.name])),
-  ...Object.fromEntries(SCHENGEN_BORDERS.features.map(f => [f.properties.code, f.properties.name])),
-};
+export const COUNTRY_NAMES = Object.fromEntries(
+  [...WORLD_FEATURES, ...SCHENGEN_FEATURES].map(f => [f.code, f.name])
+);
 
 // ── Polygon helpers ──────────────────────────────────────────────────────────
 
@@ -35,36 +35,8 @@ function pointInPolygon(lat, lon, rings) {
   return true;
 }
 
-function ringBbox(ring) {
-  let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
-  for (const [lon, lat] of ring) {
-    if (lat < minLat) minLat = lat;
-    if (lat > maxLat) maxLat = lat;
-    if (lon < minLon) minLon = lon;
-    if (lon > maxLon) maxLon = lon;
-  }
-  return [minLat, maxLat, minLon, maxLon];
-}
-
-function buildFeatures(geojson) {
-  return geojson.features.flatMap(f => {
-    const { code } = f.properties;
-    const { type, coordinates } = f.geometry;
-    const toEntry = rings => ({ code, rings, bbox: ringBbox(rings[0]) });
-    if (type === 'Polygon') return [toEntry(coordinates)];
-    if (type === 'MultiPolygon') return coordinates.map(toEntry);
-    return [];
-  });
-}
-
-// High-res 1:50m features for Schengen (accurate day counting).
-const SCHENGEN_FEATURES = buildFeatures(SCHENGEN_BORDERS);
-
-// Low-res 1:110m features for the rest of the world (non-Schengen only).
-const WORLD_FEATURES = buildFeatures(WORLD_BORDERS).filter(f => !SCHENGEN_COUNTRIES.has(f.code));
-
 function lookup(lat, lon, features) {
-  for (const { code, rings, bbox } of features) {
+  for (const { code, bbox, rings } of features) {
     if (lat < bbox[0] || lat > bbox[1] || lon < bbox[2] || lon > bbox[3]) continue;
     if (pointInPolygon(lat, lon, rings)) return code;
   }
@@ -72,7 +44,6 @@ function lookup(lat, lon, features) {
 }
 
 export function coordToCountry(lat, lon) {
-  // Check high-res Schengen borders first, then fall through to world.
   return lookup(lat, lon, SCHENGEN_FEATURES) ?? lookup(lat, lon, WORLD_FEATURES);
 }
 
