@@ -54,43 +54,53 @@ export default function App() {
       <main className="main">
         {!result && (
           <section className="hero">
-            <p className="catchphrase">Know your count.</p>
-
-            <div
-              className={`dropzone${dragging ? ' dragging' : ''}`}
-              onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files?.[0]; if (f) analyze(f); }}
-              onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-              onDragLeave={() => setDragging(false)}
-              onClick={() => fileRef.current.click()}
-            >
-              <FileJsonIcon size={24} className="dropzone-icon" />
-              <div>
-                <p className="dropzone-text">Drop your <strong>Timeline JSON</strong> here or click to browse</p>
-                <p className="dropzone-hint">
-                  Google Maps → profile photo → Your Timeline → ⋮ → Export timeline data
-                </p>
+            <div className="hero-copy">
+              <p className="catchphrase">Know your count.</p>
+              <p className="hero-sub">Calculate your Schengen Area days from your Google Maps Timeline — entirely in your browser.</p>
+              <div className="hero-steps">
+                <div className="hero-step"><span className="hero-step-num">1</span>Open Google Maps on your phone</div>
+                <div className="hero-step"><span className="hero-step-num">2</span>Tap profile → Your Timeline → ⋮ → Export</div>
+                <div className="hero-step"><span className="hero-step-num">3</span>Drop the JSON file here</div>
               </div>
-              <input
-                ref={fileRef}
-                type="file"
-                accept=".json,application/json"
-                style={{ display: 'none' }}
-                onChange={e => { const f = e.target.files?.[0]; if (f) analyze(f); }}
-              />
             </div>
 
-            {loading && (
-              <div className="loading-msg">
-                <div className="spinner" />
-                Analyzing your timeline...
+            <div className="hero-upload">
+              <div
+                className={`dropzone${dragging ? ' dragging' : ''}`}
+                onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files?.[0]; if (f) analyze(f); }}
+                onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+                onDragLeave={() => setDragging(false)}
+                onClick={() => fileRef.current.click()}
+              >
+                <FileJsonIcon size={24} className="dropzone-icon" />
+                <div>
+                  <p className="dropzone-text">Drop your <strong>Timeline JSON</strong> here or click to browse</p>
+                  <p className="dropzone-hint">
+                    Google Maps → profile photo → Your Timeline → ⋮ → Export timeline data
+                  </p>
+                </div>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept=".json,application/json"
+                  style={{ display: 'none' }}
+                  onChange={e => { const f = e.target.files?.[0]; if (f) analyze(f); }}
+                />
               </div>
-            )}
-            {error && (
-              <div className="error-msg">
-                <AlertIcon size={15} style={{ flexShrink: 0, marginTop: 1 }} />
-                {error}
-              </div>
-            )}
+
+              {loading && (
+                <div className="loading-msg">
+                  <div className="spinner" />
+                  Analyzing your timeline...
+                </div>
+              )}
+              {error && (
+                <div className="error-msg">
+                  <AlertIcon size={15} style={{ flexShrink: 0, marginTop: 1 }} />
+                  {error}
+                </div>
+              )}
+            </div>
           </section>
         )}
 
