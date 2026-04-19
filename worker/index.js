@@ -1,4 +1,4 @@
-import { parseTimelineJson } from './schengen.js';
+import { parseTimelineJson, COUNTRY_NAMES } from './schengen.js';
 
 export default {
   async fetch(request, env) {
@@ -21,7 +21,7 @@ export default {
         } else {
           raw = await request.json();
         }
-        return Response.json(parseTimelineJson(raw));
+        return Response.json({ ...parseTimelineJson(raw), countryNames: COUNTRY_NAMES });
       } catch (e) {
         return Response.json({ error: 'Failed to parse timeline JSON: ' + e.message }, { status: 400 });
       }
