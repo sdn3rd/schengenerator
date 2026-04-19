@@ -18,53 +18,28 @@
   mix-blend-mode: screen;
 }
 
-/* Light mode orb colors — warm oranges + amber + grey */
-.o1 { background: rgba(200, 74, 0, 0.38); }
-.o2 { background: rgba(224, 96, 0, 0.28); }
-.o3 { background: rgba(240, 140, 30, 0.32); }
-.o4 { background: rgba(160, 60, 0, 0.22); }
-.o5 { background: rgba(140, 140, 140, 0.22); }
-.o6 { background: rgba(200, 160, 80, 0.28); }
+/* Light mode — cool blues + slate */
+.o1 { background: rgba(26, 95, 160, 0.32); }
+.o2 { background: rgba(45, 127, 211, 0.24); }
+.o3 { background: rgba(74, 159, 232, 0.28); }
+.o4 { background: rgba(20, 70, 130, 0.20); }
+.o5 { background: rgba(100, 130, 170, 0.20); }
+.o6 { background: rgba(60, 110, 180, 0.26); }
 
-/* Dark mode orb colors — warm orange/amber glows */
-[data-theme='dark'] .o1 { background: rgba(200, 100, 10, 0.42); }
-[data-theme='dark'] .o2 { background: rgba(240, 130, 20, 0.30); }
-[data-theme='dark'] .o3 { background: rgba(180, 75, 0, 0.38); }
-[data-theme='dark'] .o4 { background: rgba(150, 55, 0, 0.28); }
-[data-theme='dark'] .o5 { background: rgba(220, 155, 45, 0.32); }
-[data-theme='dark'] .o6 { background: rgba(200, 80, 10, 0.25); }
+/* Dark mode — electric blue glows */
+[data-theme='dark'] .o1 { background: rgba(30, 100, 200, 0.38); }
+[data-theme='dark'] .o2 { background: rgba(50, 140, 240, 0.28); }
+[data-theme='dark'] .o3 { background: rgba(20, 80, 170, 0.34); }
+[data-theme='dark'] .o4 { background: rgba(10, 60, 140, 0.26); }
+[data-theme='dark'] .o5 { background: rgba(70, 150, 230, 0.30); }
+[data-theme='dark'] .o6 { background: rgba(40, 100, 190, 0.22); }
 
-/* Each orb starts at a different position and floats on its own path */
-.o1 {
-  top: -15%;
-  left: -8%;
-  animation: drift1 32s ease-in-out infinite;
-}
-.o2 {
-  top: 50%;
-  right: -12%;
-  animation: drift2 28s ease-in-out infinite;
-}
-.o3 {
-  top: 30%;
-  left: 40%;
-  animation: drift3 38s ease-in-out infinite;
-}
-.o4 {
-  bottom: -5%;
-  left: 15%;
-  animation: drift4 24s ease-in-out infinite;
-}
-.o5 {
-  top: 10%;
-  right: 5%;
-  animation: drift5 35s ease-in-out infinite;
-}
-.o6 {
-  bottom: 20%;
-  right: 30%;
-  animation: drift6 30s ease-in-out infinite;
-}
+.o1 { top: -15%; left: -8%; animation: drift1 32s ease-in-out infinite; }
+.o2 { top: 50%; right: -12%; animation: drift2 28s ease-in-out infinite; }
+.o3 { top: 30%; left: 40%; animation: drift3 38s ease-in-out infinite; }
+.o4 { bottom: -5%; left: 15%; animation: drift4 24s ease-in-out infinite; }
+.o5 { top: 10%; right: 5%; animation: drift5 35s ease-in-out infinite; }
+.o6 { bottom: 20%; right: 30%; animation: drift6 30s ease-in-out infinite; }
 
 @keyframes drift1 {
   0%   { transform: translate(0, 0) scale(1); }
