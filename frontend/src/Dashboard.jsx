@@ -9,11 +9,26 @@ const SCHENGEN_COUNTRIES = new Set([
 ]);
 
 const PALETTE = [
-  '#7a1500','#a02000','#c23000','#c84a00',
-  '#d85a00','#e06000','#e87820','#f07820',
-  '#c87030','#a05820','#805040','#604838',
-  '#3a6e8a','#2a5a7a','#1a4a6a','#0a3a5a',
-  '#4a7a3a','#3a6a2a','#2a5a1a','#1a4a0a',
+  '#c42344', // crimson
+  '#cc5214', // orange-red
+  '#b46f09', // amber
+  '#7a8a10', // olive
+  '#267a42', // forest green
+  '#0e7060', // dark teal
+  '#0b6e99', // ocean
+  '#2a5ad4', // blue
+  '#4b42d6', // indigo
+  '#7034d4', // violet
+  '#9420b0', // purple
+  '#b52079', // pink
+  '#0b6b62', // teal
+  '#4d8a28', // green
+  '#1e7a4d', // emerald
+  '#0f6ba0', // steel blue
+  '#a35a1a', // brown-orange
+  '#748a0f', // yellow-green
+  '#c21048', // rose
+  '#7030a8', // deep violet
 ];
 
 const MONTH_NAMES = [
