@@ -5,8 +5,6 @@ import LavaLamp from './LavaLamp';
 import { SunIcon, MoonIcon, FileJsonIcon, AlertIcon } from './icons';
 import './App.css';
 
-const API = import.meta.env.VITE_API_URL ?? '';
-
 export default function App() {
   const [theme, setTheme] = useState(() =>
     window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
@@ -23,15 +21,18 @@ export default function App() {
     setError(null);
     setLoading(true);
     try {
-      const fd = new FormData();
-      fd.append('timeline', file);
-      const res = await fetch(`${API}/api/analyze`, { method: 'POST', body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Server error');
-      setResult(data);
+      const text = await file.text();
+      const worker = new Worker(new URL('./timelineWorker.js', import.meta.url), { type: 'module' });
+      worker.onmessage = ({ data }) => {
+        setLoading(false);
+        if (data.ok) setResult(data.result);
+        else setError(data.error);
+        worker.terminate();
+      };
+      worker.onerror = (e) => { setLoading(false); setError(e.message); worker.terminate(); };
+      worker.postMessage(text);
     } catch (e) {
       setError(e.message);
-    } finally {
       setLoading(false);
     }
   }, []);
