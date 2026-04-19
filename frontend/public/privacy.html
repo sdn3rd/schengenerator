@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy — Schengenerator</title>
+  <meta name="description" content="Schengenerator privacy policy. Your location data never leaves your device." />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://schengenerator.app/privacy.html" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #e2e2e2; --surface: #efefef; --text: #1a1a1a; --text2: #505050;
+      --accent: #c84a00; --border: rgba(180,60,0,0.35);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1a1a1a; --surface: #222; --text: #d8d8d8; --text2: #c8c8c8;
+        --accent: #e87820; --border: rgba(232,120,32,0.35);
+      }
+    }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 15px; line-height: 1.7;
+    }
+    header {
+      padding: 14px 28px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    header a { color: var(--accent); text-decoration: none; font-weight: 600; font-size: 15px; }
+    header a:hover { text-decoration: underline; }
+    .page { max-width: 720px; margin: 0 auto; padding: 48px 28px 80px; }
+    h1 { font-size: 28px; font-weight: 800; letter-spacing: -0.5px; color: var(--text); margin-bottom: 6px; }
+    .updated { font-size: 13px; color: var(--text2); margin-bottom: 40px; }
+    h2 { font-size: 17px; font-weight: 700; margin: 32px 0 10px; color: var(--text); }
+    p { color: var(--text2); margin-bottom: 14px; }
+    ul { color: var(--text2); padding-left: 20px; margin-bottom: 14px; }
+    ul li { margin-bottom: 6px; }
+    a { color: var(--accent); }
+    .badge {
+      display: inline-block; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: 600;
+      color: var(--text2); margin: 0 4px 8px 0;
+    }
+    hr { border: none; border-top: 1px solid var(--border); margin: 40px 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="/">← Schengenerator</a>
+    <span style="font-size:12px;color:var(--text2)">schengenerator.app</span>
+  </header>
+
+  <main class="page">
+    <h1>Privacy Policy</h1>
+    <p class="updated">Last updated: April 19, 2026</p>
+
+    <p>
+      <span class="badge">GDPR</span>
+      <span class="badge">CCPA</span>
+      <span class="badge">No cookies</span>
+      <span class="badge">No tracking</span>
+    </p>
+
+    <p>
+      Schengenerator is a free, open-source tool that calculates your Schengen Area day count
+      from a Google Maps Timeline export. This policy explains exactly how your data is handled.
+    </p>
+
+    <h2>The short version</h2>
+    <p>
+      Your location data is processed entirely in-memory on Cloudflare's edge infrastructure
+      and is never stored, logged, or retained in any form. We collect no personal data. There
+      are no cookies, no analytics trackers, and no third-party scripts.
+    </p>
+
+    <h2>What happens when you upload a file</h2>
+    <ul>
+      <li>Your Timeline JSON file is read locally in your browser and sent via an encrypted HTTPS request to our analysis endpoint.</li>
+      <li>The endpoint runs on a <strong>stateless Cloudflare Worker</strong>. It parses the file in memory, computes your Schengen day count, and returns the result as JSON.</li>
+      <li>The file and all GPS coordinates are discarded immediately after the response is sent. Nothing is written to disk, a database, or any storage layer.</li>
+      <li>The result is held in your browser's memory only. Closing or refreshing the page clears it entirely.</li>
+    </ul>
+
+    <h2>Data we do not collect</h2>
+    <ul>
+      <li>GPS coordinates or location history</li>
+      <li>Names, email addresses, or any identity information</li>
+      <li>Device fingerprints or advertising identifiers</li>
+      <li>Usage behavior or analytics events</li>
+    </ul>
+
+    <h2>Infrastructure &amp; third parties</h2>
+    <p>
+      The site is hosted on <strong>Cloudflare Pages</strong>. As with any CDN, Cloudflare's
+      infrastructure retains standard edge logs (IP address, timestamp, HTTP status, bytes
+      transferred) for security and abuse prevention purposes. These logs do not contain the
+      contents of your uploaded file. Cloudflare's privacy practices are governed by their
+      <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener">Privacy Policy</a>.
+    </p>
+    <p>No other third-party services, SDKs, or tracking pixels are loaded by this application.</p>
+
+    <h2>Cookies &amp; local storage</h2>
+    <p>
+      Schengenerator sets no cookies and writes nothing to <code>localStorage</code> or
+      <code>sessionStorage</code>. Your browser may cache static assets (CSS, JS) in its
+      normal HTTP cache; this contains no personal data.
+    </p>
+
+    <h2>GDPR (EU/EEA users)</h2>
+    <p>
+      Because Schengenerator does not collect, store, or process any personal data in a
+      persistent form, it does not act as a data controller or data processor under the
+      General Data Protection Regulation (GDPR). No lawful basis for processing is required
+      as no personal data is retained. There is no data to access, correct, export, or erase.
+    </p>
+
+    <h2>CCPA (California residents)</h2>
+    <p>
+      Schengenerator does not sell, share, or disclose personal information to third parties.
+      No personal information is collected for business or commercial purposes. California
+      residents have no additional obligations under the California Consumer Privacy Act (CCPA)
+      because no personal data is held.
+    </p>
+
+    <h2>Children</h2>
+    <p>
+      Schengenerator does not knowingly collect information from children under 13 (US) or
+      under 16 (EU). Because no personal data is collected at all, this is satisfied by design.
+    </p>
+
+    <h2>Changes to this policy</h2>
+    <p>
+      If we make material changes to how data is handled, this page will be updated and the
+      "last updated" date at the top will change. Substantive changes will also be noted in the
+      <a href="https://github.com/sdn3rd/schengenerator/commits/main" target="_blank" rel="noopener">GitHub commit history</a>.
+    </p>
+
+    <hr />
+
+    <h2>Contact</h2>
+    <p>
+      Questions about this policy can be raised via
+      <a href="https://github.com/sdn3rd/schengenerator/issues" target="_blank" rel="noopener">GitHub Issues</a>.
+    </p>
+  </main>
+</body>
+</html>
