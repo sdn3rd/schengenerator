@@ -63,26 +63,38 @@
   z-index: 1;
 }
 
-/* Split hero — copy left, upload right */
+/* Split hero — copy + steps left, upload right */
 .hero {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  align-items: center;
-  gap: 64px;
+  grid-template-rows: auto auto;
+  grid-template-areas:
+    "copy   upload"
+    "steps  upload";
+  column-gap: 64px;
+  row-gap: 24px;
   padding-top: 48px;
   min-height: 60vh;
+  align-items: start;
 }
 
 .hero-copy {
+  grid-area: copy;
   display: flex;
   flex-direction: column;
   gap: 20px;
 }
 
+.hero-steps {
+  grid-area: steps;
+}
+
 .hero-upload {
+  grid-area: upload;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  align-self: center;
 }
 
 .catchphrase {
@@ -104,7 +116,6 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-top: 8px;
 }
 
 .hero-step {
@@ -222,11 +233,16 @@
 @media (max-width: 800px) {
   .hero {
     grid-template-columns: 1fr;
-    gap: 32px;
+    grid-template-areas:
+      "copy"
+      "upload"
+      "steps";
+    gap: 24px;
     padding-top: 24px;
     min-height: unset;
   }
-  .hero-sub, .hero-steps { display: none; }
+  .hero-sub { display: none; }
+  .hero-steps { margin-top: 0; }
   .catchphrase { font-size: clamp(28px, 8vw, 44px); letter-spacing: -1px; }
 }
 
