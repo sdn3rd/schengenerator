@@ -91,6 +91,14 @@ export function KeyIcon({ size = 16, ...p }) {
   );
 }
 
+export function ChevronDownIcon({ size = 16, ...p }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" {...p}>
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  );
+}
+
 export function RefreshIcon({ size = 16, ...p }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
