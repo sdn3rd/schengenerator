@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { ArrowLeftIcon, ChevronDownIcon } from './icons';
+import PrintReport from './PrintReport';
 import './Dashboard.css';
 
 const SCHENGEN_COUNTRIES = new Set([
@@ -69,14 +70,48 @@ function StatusBar({ total, windowSize }) {
   );
 }
 
+function FeieStatusBar({ stats }) {
+  const { usaCount, nonUsaCount, qualifies, eligibilityDate, daysUntilEligible } = stats;
+  const pct = Math.min((usaCount / 35) * 100, 100);
+  const color = qualifies
+    ? '#267a42'
+    : usaCount <= 50
+    ? '#cc5214'
+    : '#c42344';
+  return (
+    <div className="status-bar-wrap feie-bar">
+      <div className="status-bar-track">
+        <div className="status-bar-fill" style={{ width: `${pct}%`, background: color }} />
+      </div>
+      <div className="status-bar-labels">
+        <span style={{ color }}>{usaCount} / 35 US days used (last 365)</span>
+        <span className="status-bar-remain" style={{ color }}>
+          {qualifies
+            ? 'Qualifies for FEIE ✓'
+            : eligibilityDate
+            ? `Eligible ${formatDate(eligibilityDate)} (${daysUntilEligible}d)`
+            : 'Does not qualify'}
+        </span>
+      </div>
+      <div className="feie-sub">
+        <strong>FEIE Physical Presence Test:</strong> need 330+ days outside the USA in any
+        365-day window. Currently <strong>{nonUsaCount}</strong> day{nonUsaCount === 1 ? '' : 's'} outside.
+        {!qualifies && eligibilityDate && (
+          <> Assuming no further US travel, you qualify on <strong>{formatDate(eligibilityDate)}</strong>.</>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SectionHeader({ title, open, onToggle, note }) {
   return (
-    <button className="section-header" onClick={onToggle} aria-expanded={open}>
+    <button className={`section-header${open ? ' open' : ''}`} onClick={onToggle} aria-expanded={open}>
       <span className="section-title">
         {title}
         {note && <span className="section-note">{note}</span>}
       </span>
-      <ChevronDownIcon size={14} className={`section-chevron${open ? ' open' : ''}`} />
+      <ChevronDownIcon size={18} className={`section-chevron${open ? ' open' : ''}`} />
     </button>
   );
 }
@@ -93,6 +128,7 @@ export default function Dashboard({ data, onReset }) {
   const [sectionOpen, setSectionOpen] = useState({ ...DEFAULT_OPEN });
   const [snapshot, setSnapshot] = useState(null);
   const [snapshotDirty, setSnapshotDirty] = useState(false);
+  const [showPrint, setShowPrint] = useState(false);
 
   const allClosed = Object.values(sectionOpen).every(v => !v);
 
@@ -204,6 +240,37 @@ export default function Dashboard({ data, onReset }) {
     [visibleDays]
   );
 
+  const feieStats = useMemo(() => {
+    const last365 = days.slice(-365);
+    const usaDates = last365.filter(d => d.countries.includes('US')).map(d => d.date);
+    const usaCount = usaDates.length;
+    const nonUsaCount = 365 - usaCount;
+    const qualifies = usaCount <= 35;
+
+    let eligibilityDate = null;
+    let daysUntilEligible = 0;
+
+    if (!qualifies) {
+      const sorted = [...usaDates].sort();
+      const targetDay = sorted[usaCount - 36];
+      const [y, m, d] = targetDay.split('-').map(Number);
+      const dateObj = new Date(Date.UTC(y, m - 1, d));
+      dateObj.setUTCDate(dateObj.getUTCDate() + 365);
+      eligibilityDate = `${dateObj.getUTCFullYear()}-${String(dateObj.getUTCMonth() + 1).padStart(2, '0')}-${String(dateObj.getUTCDate()).padStart(2, '0')}`;
+
+      const todayStr = days[days.length - 1]?.date;
+      if (todayStr) {
+        const [ty, tm, td] = todayStr.split('-').map(Number);
+        const todayObj = new Date(Date.UTC(ty, tm - 1, td));
+        daysUntilEligible = Math.max(0, Math.round((dateObj - todayObj) / 86400000));
+      }
+    }
+
+    return { usaCount, nonUsaCount, qualifies, eligibilityDate, daysUntilEligible };
+  }, [days]);
+
+  if (showPrint) return <PrintReport data={data} onClose={() => setShowPrint(false)} />;
+
   return (
     <div className="dashboard">
       <div className="dash-header">
@@ -214,6 +281,9 @@ export default function Dashboard({ data, onReset }) {
         <div className="dash-actions">
           <button className="collapse-btn" onClick={masterToggle}>
             {allClosed ? 'Expand all' : 'Collapse all'}
+          </button>
+          <button className="print-report-btn" onClick={() => setShowPrint(true)}>
+            Print / Save PDF
           </button>
           <button className="reset-btn" onClick={onReset}>
             <ArrowLeftIcon size={14} /> Upload new file
@@ -241,6 +311,9 @@ export default function Dashboard({ data, onReset }) {
           </div>
         </div>
       )}
+
+      <FeieStatusBar stats={feieStats} />
+
 
       {/* Date range — collapsible */}
       <div className="section-wrap">

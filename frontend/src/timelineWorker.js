@@ -59,7 +59,7 @@ function toDateStr(ms) {
 
 function parseTimelineJson(raw) {
   const now = Date.now(), DAY = 86400000, cutoff = now - 730 * DAY;
-  const MIN_PINGS = 2, pingCounts = {};
+  const MIN_PINGS = 2, pingCounts = {}, locationMap = {};
 
   function recordGpsDay(ts, lat, lon) {
     if (ts < cutoff || isNaN(lat) || isNaN(lon)) return;
@@ -68,6 +68,13 @@ function parseTimelineJson(raw) {
     const d = toDateStr(ts);
     if (!pingCounts[d]) pingCounts[d] = {};
     pingCounts[d][country] = (pingCounts[d][country] ?? 0) + 1;
+  }
+
+  function recordLocation(ts, name) {
+    if (!name || ts < cutoff) return;
+    const d = toDateStr(ts);
+    if (!locationMap[d]) locationMap[d] = new Set();
+    locationMap[d].add(name);
   }
 
   function processLocations(locs) {
@@ -85,13 +92,25 @@ function parseTimelineJson(raw) {
     processLocations(raw.locations);
   } else if (raw.semanticSegments) {
     for (const seg of raw.semanticSegments) {
-      if (!seg.timelinePath) continue;
-      for (const pt of seg.timelinePath) {
-        recordGpsDay(parseMs(pt.time), ...parseLatLng(pt.point));
+      if (seg.timelinePath) {
+        for (const pt of seg.timelinePath) {
+          recordGpsDay(parseMs(pt.time), ...parseLatLng(pt.point));
+        }
+      }
+      if (seg.visit?.topCandidate?.placeLocation?.latLng) {
+        recordGpsDay(parseMs(seg.startTime), ...parseLatLng(seg.visit.topCandidate.placeLocation.latLng));
       }
     }
   } else if (raw.timelineObjects) {
     for (const obj of raw.timelineObjects) {
+      if (obj.placeVisit) {
+        const pv = obj.placeVisit;
+        const ts = parseMs(pv.duration?.startTimestampMs ?? pv.duration?.startTimestamp ?? 0);
+        const lat = typeof pv.location?.latitudeE7 === 'number' ? pv.location.latitudeE7 / 1e7 : NaN;
+        const lon = typeof pv.location?.longitudeE7 === 'number' ? pv.location.longitudeE7 / 1e7 : NaN;
+        recordGpsDay(ts, lat, lon);
+        if (pv.location?.name) recordLocation(ts, pv.location.name);
+      }
       const seg = obj.activitySegment;
       if (!seg) continue;
       const rawPath = seg.simplifiedRawPath ?? seg.waypointPath;
@@ -112,6 +131,11 @@ function parseTimelineJson(raw) {
     days.push({ date: d, countries: Object.entries(counts).filter(([,n]) => n >= MIN_PINGS).map(([c]) => c) });
   }
 
+  const locations = {};
+  for (const [d, names] of Object.entries(locationMap)) {
+    locations[d] = [...names];
+  }
+
   const recent = days.slice(-180);
   const countryTotals = {};
   for (const { countries } of recent)
@@ -120,7 +144,7 @@ function parseTimelineJson(raw) {
 
   const totalSchengenDays = recent.filter(d => d.countries.some(c => SCHENGEN_COUNTRIES.has(c))).length;
 
-  return { days, countryTotals, totalSchengenDays, countryNames: COUNTRY_NAMES };
+  return { days, countryTotals, totalSchengenDays, countryNames: COUNTRY_NAMES, locations };
 }
 
 self.onmessage = ({ data: text }) => {

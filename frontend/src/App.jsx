@@ -54,15 +54,16 @@ export default function App() {
       <main className="main">
         {!result && (
           <section className="hero">
-            <div className="hero-copy">
-              <p className="catchphrase">Know your count.</p>
-              <p className="hero-sub">Calculate your Schengen Area days from your Google Maps Timeline — entirely in your browser.</p>
-            </div>
-
-            <div className="hero-steps">
-              <div className="hero-step"><span className="hero-step-num">1</span>Open Google Maps on your phone</div>
-              <div className="hero-step"><span className="hero-step-num">2</span>Tap profile → Your Timeline → ⋮ → Export</div>
-              <div className="hero-step"><span className="hero-step-num">3</span>Drop the JSON file here</div>
+            <div className="hero-left">
+              <div className="hero-copy">
+                <p className="catchphrase">Know your count.</p>
+                <p className="hero-sub">Calculate your Schengen Area days from your Google Maps Timeline — entirely in your browser.</p>
+              </div>
+              <div className="hero-steps">
+                <div className="hero-step"><span className="hero-step-num">1</span>Open Google Maps on your phone</div>
+                <div className="hero-step"><span className="hero-step-num">2</span>Tap profile → Your Timeline → ⋮ → Export</div>
+                <div className="hero-step"><span className="hero-step-num">3</span>Drop the JSON file here</div>
+              </div>
             </div>
 
             <div className="hero-upload">

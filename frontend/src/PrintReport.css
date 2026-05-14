@@ -1,0 +1,241 @@
+/* Screen: full-screen overlay */
+.print-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: #e8eaf0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 16px 48px;
+  gap: 20px;
+}
+
+.print-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  gap: 10px;
+  align-self: flex-end;
+  max-width: 820px;
+  width: 100%;
+  background: rgba(232, 234, 240, 0.92);
+  backdrop-filter: blur(8px);
+  padding: 10px 0;
+}
+
+.print-action-btn {
+  padding: 9px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid #c0c8d8;
+  background: #fff;
+  color: #333;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.print-action-btn:hover { background: #f0f2f5; }
+.print-action-btn.primary {
+  background: #1a56db;
+  color: #fff;
+  border-color: #1a56db;
+}
+.print-action-btn.primary:hover { background: #1446b8; }
+
+/* Document card */
+.print-document {
+  background: #fff;
+  max-width: 820px;
+  width: 100%;
+  padding: 52px 56px;
+  border-radius: 6px;
+  box-shadow: 0 4px 32px rgba(0,0,0,0.14);
+  font-family: Georgia, 'Times New Roman', serif;
+  color: #1a1a1a;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* Header */
+.report-header {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  margin-bottom: 28px;
+}
+
+.report-seal {
+  color: #1a3a6e;
+  flex-shrink: 0;
+}
+
+.report-title {
+  font-size: 22px;
+  font-weight: 700;
+  font-family: Georgia, serif;
+  letter-spacing: 0.02em;
+  margin: 0 0 6px;
+  color: #1a3a6e;
+}
+
+.report-meta {
+  font-size: 12px;
+  color: #555;
+  margin: 2px 0;
+  font-family: Arial, sans-serif;
+}
+
+.report-rule {
+  border: none;
+  border-top: 1.5px solid #c8cdd8;
+  margin: 20px 0;
+}
+
+/* Sections */
+.report-section {
+  margin-bottom: 8px;
+}
+
+.report-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  font-family: Arial, sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #1a3a6e;
+  margin: 0 0 14px;
+}
+
+.report-section-note {
+  font-size: 10px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: #666;
+}
+
+/* Summary row */
+.report-summary-row {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 18px;
+}
+
+.report-day-count {
+  font-family: Arial, sans-serif;
+  white-space: nowrap;
+}
+
+.report-num {
+  font-size: 42px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.report-denom {
+  font-size: 16px;
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+.report-progress-wrap {
+  flex: 1;
+}
+
+.report-progress-track {
+  height: 8px;
+  background: #e2e6ed;
+  border-radius: 99px;
+  overflow: hidden;
+  margin-bottom: 5px;
+}
+
+.report-progress-fill {
+  height: 100%;
+  border-radius: 99px;
+}
+
+.report-progress-label {
+  font-size: 12px;
+  font-family: Arial, sans-serif;
+  font-weight: 600;
+  margin: 0;
+}
+
+/* Tables */
+.report-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  font-family: Arial, sans-serif;
+}
+
+.report-table th {
+  text-align: left;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #1a3a6e;
+  border-bottom: 1.5px solid #c8cdd8;
+  padding: 6px 10px 6px 0;
+}
+
+.report-table td {
+  padding: 5px 10px 5px 0;
+  border-bottom: 1px solid #eceef2;
+  vertical-align: top;
+}
+
+.report-table tbody tr:last-child td { border-bottom: none; }
+
+.report-code { color: #888; font-size: 11px; }
+
+.report-log .report-date-cell { white-space: nowrap; color: #333; }
+.report-log .report-loc-cell { color: #444; }
+.report-no-loc { color: #bbb; }
+
+.report-empty {
+  color: #888;
+  font-family: Arial, sans-serif;
+  font-style: italic;
+  font-size: 12px;
+}
+
+/* Disclaimer */
+.report-disclaimer {
+  font-size: 11px;
+  font-family: Arial, sans-serif;
+  color: #666;
+  line-height: 1.7;
+  background: #f5f6f9;
+  border: 1px solid #dde0e8;
+  border-radius: 4px;
+  padding: 14px 16px;
+  margin-top: 8px;
+}
+
+/* ── Print styles ── */
+@media print {
+  body * { visibility: hidden; }
+  .print-document, .print-document * { visibility: visible; }
+  .print-overlay { position: static; background: none; padding: 0; gap: 0; }
+  .print-toolbar { display: none !important; }
+  .print-document {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    max-width: 100%;
+    padding: 28px 36px;
+    box-shadow: none;
+    border-radius: 0;
+  }
+  .report-seal { color: #1a3a6e !important; }
+  .report-table { page-break-inside: auto; }
+  .report-table tr { page-break-inside: avoid; }
+}

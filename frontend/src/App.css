@@ -67,34 +67,35 @@
 .hero {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  grid-template-rows: auto auto;
-  grid-template-areas:
-    "copy   upload"
-    "steps  upload";
   column-gap: 64px;
-  row-gap: 8px;
   padding-top: 48px;
   min-height: 60vh;
-  align-items: start;
+  align-items: center;
+}
+
+.hero-left {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
 }
 
 .hero-copy {
-  grid-area: copy;
   display: flex;
   flex-direction: column;
   gap: 20px;
 }
 
 .hero-steps {
-  grid-area: steps;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
+
 .hero-upload {
-  grid-area: upload;
   display: flex;
   flex-direction: column;
   gap: 16px;
-  align-self: center;
 }
 
 .catchphrase {
@@ -233,16 +234,12 @@
 @media (max-width: 800px) {
   .hero {
     grid-template-columns: 1fr;
-    grid-template-areas:
-      "copy"
-      "upload"
-      "steps";
     gap: 24px;
     padding-top: 24px;
     min-height: unset;
+    align-items: start;
   }
   .hero-sub { display: none; }
-  .hero-steps { margin-top: 0; }
   .catchphrase { font-size: clamp(28px, 8vw, 44px); letter-spacing: -1px; }
 }
 
