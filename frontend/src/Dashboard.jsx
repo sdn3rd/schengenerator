@@ -132,6 +132,31 @@ function FeieStatusBar({ stats }) {
   );
 }
 
+function ProjectionCard({ title, date, daysAway, color, qualified, qualifiedLabel, note }) {
+  const accent = color ?? '#267a42';
+  if (qualified) {
+    return (
+      <div className="projection-card qualified" style={{ '--proj-accent': accent }}>
+        <div className="proj-card-title">{title}</div>
+        <div className="proj-card-status">{qualifiedLabel ?? '✓ Currently qualifying'}</div>
+        {note && <div className="proj-card-note">{note}</div>}
+      </div>
+    );
+  }
+  if (!date) return null;
+  return (
+    <div className="projection-card" style={{ '--proj-accent': accent }}>
+      <div className="proj-card-title">{title}</div>
+      <div className="proj-card-date">{formatDate(date)}</div>
+      <div className="proj-card-countdown">
+        <span className="proj-card-num">{daysAway}</span>
+        <span className="proj-card-unit">{daysAway === 1 ? 'day away' : 'days away'}</span>
+      </div>
+      {note && <div className="proj-card-note">{note}</div>}
+    </div>
+  );
+}
+
 function SectionHeader({ title, open, onToggle, note }) {
   return (
     <button className={`section-header${open ? ' open' : ''}`} onClick={onToggle} aria-expanded={open}>
@@ -368,9 +393,43 @@ export default function Dashboard({ data, onReset }) {
 
       {/* Status bar — always visible */}
       {tab === 'schengen' && (
-        <StatusBar total={totalSchengenDays} windowSize={windowSize} projection={schengenProjection} />
+        <>
+          <StatusBar total={totalSchengenDays} windowSize={windowSize} projection={schengenProjection} />
+          {schengenProjection.count > 0 && (
+            schengenProjection.earliestReentryDate ? (
+              <ProjectionCard
+                title="Projected earliest Schengen re-entry"
+                date={schengenProjection.earliestReentryDate}
+                daysAway={schengenProjection.earliestReentryDays}
+                color="#c42344"
+                note="First date the rolling 180-day window drops back below the 90-day limit, assuming you leave Schengen today and don't return."
+              />
+            ) : (
+              <ProjectionCard
+                title="Full 90-day Schengen allowance restored"
+                date={schengenProjection.fullResetDate}
+                daysAway={schengenProjection.fullResetDays}
+                color="#267a42"
+                note="Date the rolling 180-day window contains zero Schengen days again, assuming you leave today and don't return."
+              />
+            )
+          )}
+        </>
       )}
-      {tab === 'feie' && <FeieStatusBar stats={feieStats} />}
+      {tab === 'feie' && (
+        <>
+          <FeieStatusBar stats={feieStats} />
+          <ProjectionCard
+            title="Projected FEIE qualification"
+            date={feieStats.eligibilityDate}
+            daysAway={feieStats.daysUntilEligible}
+            color="#267a42"
+            qualified={feieStats.qualifies}
+            qualifiedLabel="✓ Currently qualifies for FEIE"
+            note="Earliest date you'll meet the 330-of-365 Physical Presence Test, assuming no further US travel from today."
+          />
+        </>
+      )}
       {tab === 'world' && (
         <div className="status-bar-wrap">
           <div className="status-bar-labels">
