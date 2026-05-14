@@ -48,7 +48,7 @@ function formatDate(dateStr) {
   });
 }
 
-function StatusBar({ total, windowSize }) {
+function StatusBar({ total, windowSize, projection }) {
   const pct = Math.min((total / 90) * 100, 100);
   const color = total >= 90 ? '#c42344' : total >= 75 ? '#cc5214' : 'var(--text2)';
   const limitLabel = total >= 90
@@ -66,6 +66,26 @@ function StatusBar({ total, windowSize }) {
         <span style={{ color }}>{total} / 90 Schengen days used</span>
         <span className="status-bar-remain" style={{ color }}>{label}</span>
       </div>
+      {projection && projection.count > 0 && (
+        <div className="proj-sub">
+          {projection.earliestReentryDate && (
+            <div className="proj-row">
+              <strong>Earliest re-entry:</strong>{' '}
+              {formatDate(projection.earliestReentryDate)}{' '}
+              <span className="proj-days">({projection.earliestReentryDays}d)</span>
+            </div>
+          )}
+          <div className="proj-row">
+            <strong>Full 90-day allowance restored:</strong>{' '}
+            {formatDate(projection.fullResetDate)}{' '}
+            <span className="proj-days">({projection.fullResetDays}d)</span>
+          </div>
+          <div className="proj-note">
+            <strong>90/180 rule:</strong> max 90 days in any rolling 180-day window.
+            Projections assume you leave the Schengen Area today and don't return.
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -87,18 +107,26 @@ function FeieStatusBar({ stats }) {
         <span style={{ color }}>{usaCount} / 35 US days used (last 365)</span>
         <span className="status-bar-remain" style={{ color }}>
           {qualifies
-            ? 'Qualifies for FEIE ✓'
+            ? 'Qualifies ✓'
             : eligibilityDate
             ? `Eligible ${formatDate(eligibilityDate)} (${daysUntilEligible}d)`
             : 'Does not qualify'}
         </span>
       </div>
-      <div className="feie-sub">
-        <strong>FEIE Physical Presence Test:</strong> need 330+ days outside the USA in any
-        365-day window. Currently <strong>{nonUsaCount}</strong> day{nonUsaCount === 1 ? '' : 's'} outside.
+      <div className="proj-sub">
         {!qualifies && eligibilityDate && (
-          <> Assuming no further US travel, you qualify on <strong>{formatDate(eligibilityDate)}</strong>.</>
+          <div className="proj-row">
+            <strong>Earliest eligibility:</strong> {formatDate(eligibilityDate)}{' '}
+            <span className="proj-days">({daysUntilEligible}d)</span>
+          </div>
         )}
+        <div className="proj-row">
+          <strong>Days outside USA (last 365):</strong> {nonUsaCount} / 330 required
+        </div>
+        <div className="proj-note">
+          <strong>FEIE Physical Presence Test:</strong> 330+ days outside the USA in any
+          365-day window. Projection assumes no further US travel from today.
+        </div>
       </div>
     </div>
   );
@@ -156,12 +184,15 @@ export default function Dashboard({ data, onReset }) {
   );
   const windowSize = endIdx - startIdx + 1;
 
-  const tabDays = useMemo(() =>
-    tab === 'schengen'
-      ? visibleDays.map(d => ({ ...d, countries: d.countries.filter(c => SCHENGEN_COUNTRIES.has(c)) }))
-      : visibleDays,
-    [visibleDays, tab]
-  );
+  const tabDays = useMemo(() => {
+    if (tab === 'schengen') {
+      return visibleDays.map(d => ({ ...d, countries: d.countries.filter(c => SCHENGEN_COUNTRIES.has(c)) }));
+    }
+    if (tab === 'feie') {
+      return visibleDays.map(d => ({ ...d, countries: d.countries.filter(c => c === 'US') }));
+    }
+    return visibleDays;
+  }, [visibleDays, tab]);
 
   const totalSchengenDays = useMemo(
     () => visibleDays.filter(d => d.countries.some(c => SCHENGEN_COUNTRIES.has(c))).length,
@@ -240,6 +271,22 @@ export default function Dashboard({ data, onReset }) {
     [visibleDays]
   );
 
+  const addDaysToStr = (dateStr, n) => {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const obj = new Date(Date.UTC(y, m - 1, d));
+    obj.setUTCDate(obj.getUTCDate() + n);
+    return `${obj.getUTCFullYear()}-${String(obj.getUTCMonth() + 1).padStart(2, '0')}-${String(obj.getUTCDate()).padStart(2, '0')}`;
+  };
+
+  const daysBetweenStr = (a, b) => {
+    if (!a || !b) return 0;
+    const pa = a.split('-').map(Number);
+    const pb = b.split('-').map(Number);
+    const da = new Date(Date.UTC(pa[0], pa[1] - 1, pa[2]));
+    const db = new Date(Date.UTC(pb[0], pb[1] - 1, pb[2]));
+    return Math.max(0, Math.round((db - da) / 86400000));
+  };
+
   const feieStats = useMemo(() => {
     const last365 = days.slice(-365);
     const usaDates = last365.filter(d => d.countries.includes('US')).map(d => d.date);
@@ -253,20 +300,35 @@ export default function Dashboard({ data, onReset }) {
     if (!qualifies) {
       const sorted = [...usaDates].sort();
       const targetDay = sorted[usaCount - 36];
-      const [y, m, d] = targetDay.split('-').map(Number);
-      const dateObj = new Date(Date.UTC(y, m - 1, d));
-      dateObj.setUTCDate(dateObj.getUTCDate() + 365);
-      eligibilityDate = `${dateObj.getUTCFullYear()}-${String(dateObj.getUTCMonth() + 1).padStart(2, '0')}-${String(dateObj.getUTCDate()).padStart(2, '0')}`;
-
+      eligibilityDate = addDaysToStr(targetDay, 365);
       const todayStr = days[days.length - 1]?.date;
-      if (todayStr) {
-        const [ty, tm, td] = todayStr.split('-').map(Number);
-        const todayObj = new Date(Date.UTC(ty, tm - 1, td));
-        daysUntilEligible = Math.max(0, Math.round((dateObj - todayObj) / 86400000));
-      }
+      daysUntilEligible = daysBetweenStr(todayStr, eligibilityDate);
     }
 
     return { usaCount, nonUsaCount, qualifies, eligibilityDate, daysUntilEligible };
+  }, [days]);
+
+  const schengenProjection = useMemo(() => {
+    const last180 = days.slice(-180);
+    const schengenDates = last180
+      .filter(d => d.countries.some(c => SCHENGEN_COUNTRIES.has(c)))
+      .map(d => d.date);
+    const count = schengenDates.length;
+    if (count === 0) {
+      return { count: 0, fullResetDate: null, fullResetDays: 0, earliestReentryDate: null, earliestReentryDays: 0 };
+    }
+    const sorted = [...schengenDates].sort();
+    const todayStr = days[days.length - 1]?.date;
+    const fullResetDate = addDaysToStr(sorted[count - 1], 180);
+    const fullResetDays = daysBetweenStr(todayStr, fullResetDate);
+    let earliestReentryDate = null;
+    let earliestReentryDays = 0;
+    if (count >= 90) {
+      const targetDay = sorted[count - 90];
+      earliestReentryDate = addDaysToStr(targetDay, 180);
+      earliestReentryDays = daysBetweenStr(todayStr, earliestReentryDate);
+    }
+    return { count, fullResetDate, fullResetDays, earliestReentryDate, earliestReentryDays };
   }, [days]);
 
   if (showPrint) return <PrintReport data={data} onClose={() => setShowPrint(false)} />;
@@ -296,13 +358,19 @@ export default function Dashboard({ data, onReset }) {
         <button className={`tab-btn${tab === 'schengen' ? ' active' : ''}`} onClick={() => setTab('schengen')}>
           Schengen
         </button>
+        <button className={`tab-btn${tab === 'feie' ? ' active' : ''}`} onClick={() => setTab('feie')}>
+          FEIE (US)
+        </button>
         <button className={`tab-btn${tab === 'world' ? ' active' : ''}`} onClick={() => setTab('world')}>
           World
         </button>
       </div>
 
       {/* Status bar — always visible */}
-      {tab === 'schengen' && <StatusBar total={totalSchengenDays} windowSize={windowSize} />}
+      {tab === 'schengen' && (
+        <StatusBar total={totalSchengenDays} windowSize={windowSize} projection={schengenProjection} />
+      )}
+      {tab === 'feie' && <FeieStatusBar stats={feieStats} />}
       {tab === 'world' && (
         <div className="status-bar-wrap">
           <div className="status-bar-labels">
@@ -311,8 +379,6 @@ export default function Dashboard({ data, onReset }) {
           </div>
         </div>
       )}
-
-      <FeieStatusBar stats={feieStats} />
 
 
       {/* Date range — collapsible */}
@@ -392,7 +458,7 @@ export default function Dashboard({ data, onReset }) {
 
       {legendEntries.length === 0 && (
         <div className="no-data">
-          No {tab === 'schengen' ? 'Schengen Area' : 'international'} visits detected in the selected period.
+          No {tab === 'schengen' ? 'Schengen Area' : tab === 'feie' ? 'USA' : 'international'} visits detected in the selected period.
           <br />
           <small>Adjust the date range or check that your Timeline JSON contains GPS path data.</small>
         </div>
