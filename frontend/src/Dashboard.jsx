@@ -93,47 +93,41 @@ function StatusBar({ total, windowSize, projection, asOf, isHistorical }) {
   );
 }
 
-function FeieStatusBar({ stats, asOf, isHistorical }) {
-  const { usaCount, nonUsaCount, qualifies, eligibilityDate, daysUntilEligible, windowLen } = stats;
-  const pct = Math.min((usaCount / 35) * 100, 100);
+function FeieStatusBar({ stats, asOf }) {
+  const { usaCount, nonUsaCount, qualifies, qualifyingDate, daysUntilQualifying, windowLen, startDateStr } = stats;
+  const pct = Math.min((nonUsaCount / 330) * 100, 100);
   const color = qualifies
     ? '#267a42'
-    : usaCount <= 50
-    ? '#cc5214'
-    : '#c42344';
+    : pct >= 75
+    ? '#b46f09'
+    : 'var(--text2)';
   return (
     <div className="status-bar-wrap feie-bar">
       <div className="status-bar-track">
         <div className="status-bar-fill" style={{ width: `${pct}%`, background: color }} />
       </div>
       <div className="status-bar-labels">
-        <span style={{ color }}>
-          {usaCount} / 35 US days used{windowLen < 365 ? ` (window: ${windowLen}d)` : ''}
-        </span>
+        <span style={{ color }}>{nonUsaCount} / 330 outside-USA days</span>
         <span className="status-bar-remain" style={{ color }}>
-          {qualifies
-            ? 'Qualifies ✓'
-            : eligibilityDate
-            ? `Eligible ${formatDate(eligibilityDate)} (${daysUntilEligible}d)`
-            : 'Does not qualify'}
+          {qualifies ? 'Qualifies ✓' : `${daysUntilQualifying} more needed`}
         </span>
       </div>
-      {isHistorical && (
-        <div className="asof-tag">as of {formatDate(asOf)}</div>
-      )}
+      <div className="asof-tag">
+        Period: {formatDate(startDateStr)} → {formatDate(asOf)} ({windowLen}d, {usaCount} in US)
+      </div>
       <div className="proj-sub">
-        {!qualifies && eligibilityDate && (
-          <div className="proj-row">
-            <strong>Earliest eligibility:</strong> {formatDate(eligibilityDate)}{' '}
-            <span className="proj-days">({daysUntilEligible}d)</span>
-          </div>
-        )}
         <div className="proj-row">
-          <strong>Days outside USA in {windowLen}-day window:</strong> {nonUsaCount} / 330 required
+          <strong>{qualifies ? 'Hit 330 outside-USA days on:' : 'Projected qualification:'}</strong>{' '}
+          {formatDate(qualifyingDate)}
+          {!qualifies && (
+            <> <span className="proj-days">({daysUntilQualifying}d from {formatDate(asOf)})</span></>
+          )}
         </div>
         <div className="proj-note">
           <strong>FEIE Physical Presence Test:</strong> 330+ days outside the USA in any
-          365-day window. Projection assumes no further US travel from today.
+          365-day window. Tally counts outside-USA days from your selected start date
+          ({formatDate(startDateStr)}); projection assumes continuous absence from the USA
+          after {formatDate(asOf)}. Adjust the slider to set period start and evaluation date.
         </div>
       </div>
     </div>
@@ -156,10 +150,12 @@ function ProjectionCard({ title, date, daysAway, color, qualified, qualifiedLabe
     <div className="projection-card" style={{ '--proj-accent': accent }}>
       <div className="proj-card-title">{title}</div>
       <div className="proj-card-date">{formatDate(date)}</div>
-      <div className="proj-card-countdown">
-        <span className="proj-card-num">{daysAway}</span>
-        <span className="proj-card-unit">{daysAway === 1 ? 'day away' : 'days away'}</span>
-      </div>
+      {daysAway != null && (
+        <div className="proj-card-countdown">
+          <span className="proj-card-num">{daysAway}</span>
+          <span className="proj-card-unit">{daysAway === 1 ? 'day away' : 'days away'}</span>
+        </div>
+      )}
       {note && <div className="proj-card-note">{note}</div>}
     </div>
   );
@@ -325,26 +321,33 @@ export default function Dashboard({ data, onReset }) {
   const isHistorical = evalDateStr && realTodayStr && evalDateStr !== realTodayStr;
 
   const feieStats = useMemo(() => {
-    const startEval = Math.max(0, endIdx - 364);
-    const feieWindow = days.slice(startEval, endIdx + 1);
-    const usaDates = feieWindow.filter(d => d.countries.includes('US')).map(d => d.date);
-    const usaCount = usaDates.length;
-    const windowLen = feieWindow.length;
-    const nonUsaCount = windowLen - usaCount;
-    const qualifies = usaCount <= 35;
+    const periodWindow = days.slice(startIdx, endIdx + 1);
+    const windowLen = periodWindow.length;
+    const outsideDates = periodWindow.filter(d => !d.countries.includes('US')).map(d => d.date);
+    const usaCount = windowLen - outsideDates.length;
+    const nonUsaCount = outsideDates.length;
+    const qualifies = nonUsaCount >= 330;
+    const startDateStr = days[startIdx]?.date;
 
-    let eligibilityDate = null;
-    let daysUntilEligible = 0;
+    let qualifyingDate = null;
+    let daysUntilQualifying = 0;
 
-    if (!qualifies) {
-      const sorted = [...usaDates].sort();
-      const targetDay = sorted[usaCount - 36];
-      eligibilityDate = addDaysToStr(targetDay, 365);
-      daysUntilEligible = daysBetweenStr(evalDateStr, eligibilityDate);
+    if (qualifies) {
+      const sortedOutside = [...outsideDates].sort();
+      qualifyingDate = sortedOutside[329];
+      daysUntilQualifying = 0;
+    } else {
+      const remaining = 330 - nonUsaCount;
+      qualifyingDate = addDaysToStr(evalDateStr, remaining);
+      daysUntilQualifying = remaining;
     }
 
-    return { usaCount, nonUsaCount, qualifies, eligibilityDate, daysUntilEligible, windowLen };
-  }, [days, endIdx, evalDateStr]);
+    return {
+      usaCount, nonUsaCount, qualifies,
+      qualifyingDate, daysUntilQualifying,
+      windowLen, startDateStr,
+    };
+  }, [days, startIdx, endIdx, evalDateStr]);
 
   const schengenProjection = useMemo(() => {
     const startEval = Math.max(0, endIdx - 179);
@@ -439,13 +442,15 @@ export default function Dashboard({ data, onReset }) {
         <>
           <FeieStatusBar stats={feieStats} asOf={evalDateStr} isHistorical={isHistorical} />
           <ProjectionCard
-            title={`Projected FEIE qualification${isHistorical ? ` (as of ${formatDate(evalDateStr)})` : ''}`}
-            date={feieStats.eligibilityDate}
-            daysAway={feieStats.daysUntilEligible}
-            color="#267a42"
-            qualified={feieStats.qualifies}
-            qualifiedLabel={isHistorical ? `✓ Qualified as of ${formatDate(evalDateStr)}` : '✓ Currently qualifies for FEIE'}
-            note={`Earliest date you'll meet the 330-of-365 Physical Presence Test, assuming no further US travel from ${isHistorical ? formatDate(evalDateStr) : 'today'}.`}
+            title={feieStats.qualifies ? 'FEIE qualified — 330 days reached' : 'Projected FEIE qualification date'}
+            date={feieStats.qualifyingDate}
+            daysAway={feieStats.qualifies ? null : feieStats.daysUntilQualifying}
+            color={feieStats.qualifies ? '#267a42' : '#cc5214'}
+            note={`Counting outside-USA days from ${formatDate(feieStats.startDateStr)}. ${
+              feieStats.qualifies
+                ? `You hit 330 outside-USA days on this date.`
+                : `Need ${330 - feieStats.nonUsaCount} more outside-USA days, assuming continuous absence from the USA after ${formatDate(evalDateStr)}.`
+            }`}
           />
         </>
       )}
