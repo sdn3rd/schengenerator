@@ -245,43 +245,51 @@ export default function Dashboard({ data, onReset }) {
   const handleFillMouseDown = (e) => {
     e.preventDefault();
     const rect = sliderRef.current.getBoundingClientRect();
-    const windowLen = endIdx - startIdx;
-    dragRef.current = { startX: e.clientX, startStart: startIdx, windowLen };
-    const onMove = (ev) => {
-      const deltaIdx = Math.round(((ev.clientX - dragRef.current.startX) / rect.width) * sliderMax);
-      const ns = Math.max(0, Math.min(dragRef.current.startStart + deltaIdx, sliderMax - dragRef.current.windowLen));
-      setStartIdx(ns);
-      setEndIdx(ns + dragRef.current.windowLen);
-    };
-    const onUp = () => {
+    const wLen = endIdx - startIdx;
+    const startX = e.clientX;
+    const startStart = startIdx;
+    const handlers = {};
+    const cleanup = () => {
       dragRef.current = null;
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
+      document.removeEventListener('mousemove', handlers.move);
+      document.removeEventListener('mouseup', cleanup);
     };
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
+    handlers.move = (ev) => {
+      const raw = startStart + Math.round(((ev.clientX - startX) / rect.width) * sliderMax);
+      const clamped = Math.max(0, Math.min(raw, sliderMax - wLen));
+      setStartIdx(clamped);
+      setEndIdx(clamped + wLen);
+      if (raw <= 0 || raw + wLen >= sliderMax) cleanup();
+    };
+    dragRef.current = true;
+    document.addEventListener('mousemove', handlers.move);
+    document.addEventListener('mouseup', cleanup);
   };
 
   const handleFillTouchStart = (e) => {
     e.preventDefault();
     const touch = e.touches[0];
     const rect = sliderRef.current.getBoundingClientRect();
-    const windowLen = endIdx - startIdx;
-    dragRef.current = { startX: touch.clientX, startStart: startIdx, windowLen };
-    const onMove = (ev) => {
-      ev.preventDefault();
-      const deltaIdx = Math.round(((ev.touches[0].clientX - dragRef.current.startX) / rect.width) * sliderMax);
-      const ns = Math.max(0, Math.min(dragRef.current.startStart + deltaIdx, sliderMax - dragRef.current.windowLen));
-      setStartIdx(ns);
-      setEndIdx(ns + dragRef.current.windowLen);
-    };
-    const onEnd = () => {
+    const wLen = endIdx - startIdx;
+    const startX = touch.clientX;
+    const startStart = startIdx;
+    const handlers = {};
+    const cleanup = () => {
       dragRef.current = null;
-      document.removeEventListener('touchmove', onMove);
-      document.removeEventListener('touchend', onEnd);
+      document.removeEventListener('touchmove', handlers.move);
+      document.removeEventListener('touchend', cleanup);
     };
-    document.addEventListener('touchmove', onMove, { passive: false });
-    document.addEventListener('touchend', onEnd);
+    handlers.move = (ev) => {
+      ev.preventDefault();
+      const raw = startStart + Math.round(((ev.touches[0].clientX - startX) / rect.width) * sliderMax);
+      const clamped = Math.max(0, Math.min(raw, sliderMax - wLen));
+      setStartIdx(clamped);
+      setEndIdx(clamped + wLen);
+      if (raw <= 0 || raw + wLen >= sliderMax) cleanup();
+    };
+    dragRef.current = true;
+    document.addEventListener('touchmove', handlers.move, { passive: false });
+    document.addEventListener('touchend', cleanup);
   };
 
   function applyPreset(n) {
@@ -567,49 +575,47 @@ export default function Dashboard({ data, onReset }) {
                 </button>
               ))}
             </div>
-            <div className="date-range-labels">
-              <span className={`date-thumb-label${lockedThumb === 'start' || lockedThumb === 'both' ? ' is-locked' : ''}`}>
+            <div className="slider-with-labels" ref={sliderRef}>
+              {/* Date labels float above their thumb position */}
+              <div className="thumb-label-start" style={{ left: pctOf(startIdx) }}>
                 <button
                   className={`lock-toggle${lockedThumb === 'start' || lockedThumb === 'both' ? ' locked' : ''}`}
                   onClick={handleStartLockToggle}
                   title={lockedThumb === 'start' || lockedThumb === 'both' ? 'Unlock start' : 'Lock start'}
                 />
-                {formatDate(extendedDays[startIdx]?.date)}
-              </span>
-              <span className={`date-thumb-label${lockedThumb === 'end' || lockedThumb === 'both' ? ' is-locked' : ''}`}>
-                {formatDate(extendedDays[endIdx]?.date)}
+                <span className={lockedThumb === 'start' || lockedThumb === 'both' ? 'label-locked' : ''}>
+                  {formatDate(extendedDays[startIdx]?.date)}
+                </span>
+              </div>
+              <div className="thumb-label-end" style={{ left: pctOf(endIdx) }}>
+                <span className={lockedThumb === 'end' || lockedThumb === 'both' ? 'label-locked' : ''}>
+                  {formatDate(extendedDays[endIdx]?.date)}
+                </span>
                 <button
                   className={`lock-toggle${lockedThumb === 'end' || lockedThumb === 'both' ? ' locked' : ''}`}
                   onClick={handleEndLockToggle}
                   title={lockedThumb === 'end' || lockedThumb === 'both' ? 'Unlock end' : 'Lock end'}
                 />
-              </span>
-            </div>
-            <div className="dual-slider" ref={sliderRef}>
-              <div className="dual-slider-track" />
-              <div className="dual-slider-fill" style={{ left: pctOf(startIdx), right: `${100 - (endIdx / sliderMax) * 100}%` }} />
-              <input
-                type="range" min={0} max={sliderMax} value={startIdx}
-                onChange={handleStartChange}
-                className={`slider-thumb${lockedThumb === 'start' || lockedThumb === 'both' ? ' thumb-locked' : ''}`}
-              />
-              <input
-                type="range" min={0} max={sliderMax} value={endIdx}
-                onChange={handleEndChange}
-                className={`slider-thumb${lockedThumb === 'end' || lockedThumb === 'both' ? ' thumb-locked' : ''}`}
-              />
-              {lockedThumb === 'both' && (
-                <div
-                  className="slider-drag-overlay"
-                  onMouseDown={handleFillMouseDown}
-                  onTouchStart={handleFillTouchStart}
-                />
-              )}
+              </div>
+              {/* Track */}
+              <div className="dual-slider">
+                <div className="dual-slider-track" />
+                <div className="dual-slider-fill" style={{ left: pctOf(startIdx), right: `${100 - (endIdx / sliderMax) * 100}%` }} />
+                {/* Visible triangles at thumb positions */}
+                <div className={`thumb-triangle${lockedThumb === 'start' || lockedThumb === 'both' ? ' locked' : ''}`} style={{ left: pctOf(startIdx) }} />
+                <div className={`thumb-triangle${lockedThumb === 'end' || lockedThumb === 'both' ? ' locked' : ''}`} style={{ left: pctOf(endIdx) }} />
+                {/* Invisible native inputs for drag handling */}
+                <input type="range" min={0} max={sliderMax} value={startIdx} onChange={handleStartChange} className="slider-thumb-hidden" />
+                <input type="range" min={0} max={sliderMax} value={endIdx} onChange={handleEndChange} className="slider-thumb-hidden" />
+                {lockedThumb === 'both' && (
+                  <div className="slider-drag-overlay" onMouseDown={handleFillMouseDown} onTouchStart={handleFillTouchStart} />
+                )}
+              </div>
             </div>
             <div className="range-hint">
               {lockedThumb === 'both'
-                ? 'drag the bar to slide · tap ○ to unlock a side'
-                : 'tap ○ to lock a side · lock both to drag the bar'}
+                ? 'drag the bar · tap ○ to unlock a side'
+                : 'tap ○ to lock a side · lock both to drag'}
             </div>
           </div>
         )}

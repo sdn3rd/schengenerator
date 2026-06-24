@@ -174,20 +174,9 @@
   color: var(--accent);
 }
 
-.date-thumb-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  transition: color 0.15s;
-}
-
-.date-thumb-label.is-locked {
-  color: var(--accent);
-}
-
 .lock-toggle {
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
   border-radius: 50%;
   border: 1.5px solid var(--surface2);
   background: var(--surface);
@@ -214,33 +203,7 @@
   text-align: center;
 }
 
-.slider-thumb.thumb-locked::-webkit-slider-thumb {
-  background: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent), 0 1px 5px rgba(0,0,0,0.2);
-  cursor: default;
-}
-
-.slider-thumb.thumb-locked::-moz-range-thumb {
-  background: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
-  cursor: default;
-}
-
-.slider-drag-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  cursor: grab;
-  z-index: 10;
-  border-radius: 2px;
-}
-
-.slider-drag-overlay:active {
-  cursor: grabbing;
-}
-
+/* Floating labels + triangle thumb slider */
 .date-range-wrap {
   padding: 18px 22px;
   display: flex;
@@ -248,17 +211,41 @@
   gap: 14px;
 }
 
-.date-range-labels {
+.slider-with-labels {
+  position: relative;
+  padding-top: 38px; /* room for floating date labels above the track */
+}
+
+.thumb-label-start,
+.thumb-label-end {
+  position: absolute;
+  top: 0;
   display: flex;
-  justify-content: space-between;
-  font-size: 13px;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.thumb-label-start {
+  transform: translateX(-50%);
+}
+
+.thumb-label-end {
+  transform: translateX(-50%);
+}
+
+.label-locked {
+  color: var(--accent);
 }
 
 .dual-slider {
   position: relative;
   height: 20px;
+  overflow: visible;
 }
 
 .dual-slider-track {
@@ -281,7 +268,28 @@
   pointer-events: none;
 }
 
-.slider-thumb {
+/* Down-pointing triangle thumb (▼) */
+.thumb-triangle {
+  position: absolute;
+  top: -1px;
+  width: 0;
+  height: 0;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-top: 10px solid var(--text-muted);
+  transform: translateX(-50%);
+  pointer-events: none;
+  transition: border-top-color 0.15s;
+  z-index: 1;
+}
+
+.thumb-triangle.locked {
+  border-top-color: var(--accent);
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--accent) 50%, transparent));
+}
+
+/* Invisible native range input — provides drag hit area */
+.slider-thumb-hidden {
   position: absolute;
   width: 100%;
   top: 0;
@@ -293,30 +301,46 @@
   outline: none;
   margin: 0;
   padding: 0;
+  opacity: 0;
 }
 
-.slider-thumb::-webkit-slider-thumb {
+.slider-thumb-hidden::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--accent);
-  border: 2px solid var(--surface);
-  box-shadow: 0 1px 5px rgba(0,0,0,0.25);
+  width: 22px;
+  height: 22px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
   cursor: pointer;
   pointer-events: all;
-  margin-top: 1px;
+  margin-top: -1px;
+  opacity: 0;
 }
 
-.slider-thumb::-moz-range-thumb {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--accent);
-  border: 2px solid var(--surface);
+.slider-thumb-hidden::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  background: transparent;
+  border: none;
   cursor: pointer;
   pointer-events: all;
+  opacity: 0;
+}
+
+.slider-drag-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  cursor: grab;
+  z-index: 10;
+}
+
+.slider-drag-overlay:active {
+  cursor: grabbing;
 }
 
 /* Status bar */
