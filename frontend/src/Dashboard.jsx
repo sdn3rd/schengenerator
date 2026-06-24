@@ -222,20 +222,28 @@ export default function Dashboard({ data, onReset }) {
   const handleStartChange = e => {
     const v = Number(e.target.value);
     if (rangeMode === 'fixed') {
-      setStartIdx(v);
+      setStartIdx(Math.min(v, sliderMax - fixedDays + 1));
     } else {
       setStartIdx(Math.min(v, endIdx - 29));
     }
   };
-  const handleEndChange = e => setEndIdx(Math.max(Number(e.target.value), startIdx + 29));
+  const handleEndChange = e => {
+    const v = Number(e.target.value);
+    if (rangeMode === 'fixed') {
+      setStartIdx(Math.max(0, Math.min(v - fixedDays + 1, sliderMax - fixedDays + 1)));
+    } else {
+      setEndIdx(Math.max(v, startIdx + 29));
+    }
+  };
 
-  function activateFixed(n) {
-    setRangeMode('fixed');
-    setFixedDays(n);
-    setStartIdx(Math.max(0, todayIdx - n + 1));
-  }
-  function activateFree() {
-    setRangeMode('free');
+  function handleThumbDoubleClick() {
+    if (rangeMode === 'free') {
+      setRangeMode('fixed');
+      setFixedDays(endIdx - startIdx + 1);
+    } else {
+      setEndIdx(activeEndIdx);
+      setRangeMode('free');
+    }
   }
 
   // Collapsible sections
@@ -500,42 +508,35 @@ export default function Dashboard({ data, onReset }) {
       )}
 
 
-      {/* Date range — collapsible */}
+      {/* Slider range — collapsible */}
       <div className="section-wrap">
-        <SectionHeader title="Date Range" open={sectionOpen.dateRange} onToggle={() => toggleSection('dateRange')} />
+        <SectionHeader title="Slider Range" open={sectionOpen.dateRange} onToggle={() => toggleSection('dateRange')} />
         {sectionOpen.dateRange && (
           <div className="date-range-wrap">
-            <div className="range-mode-row">
-              {[30, 60, 90, 180, 365].map(n => (
-                <button
-                  key={n}
-                  className={`range-preset-btn${rangeMode === 'fixed' && fixedDays === n ? ' active' : ''}`}
-                  onClick={() => activateFixed(n)}
-                >
-                  {n}d
-                </button>
-              ))}
-              <button
-                className={`range-preset-btn${rangeMode === 'free' ? ' active' : ''}`}
-                onClick={activateFree}
-              >
-                Free
-              </button>
-            </div>
             <div className="date-range-labels">
               <span>{formatDate(extendedDays[startIdx]?.date)}</span>
-              <span>
+              <span className="date-range-end-label">
                 {formatDate(extendedDays[activeEndIdx]?.date)}
-                {rangeMode === 'fixed' && <span className="range-window-size"> ({fixedDays}d)</span>}
+                {rangeMode === 'fixed'
+                  ? <span className="range-lock-badge">locked · {fixedDays}d</span>
+                  : <span className="range-lock-hint">double-click thumb to lock</span>
+                }
               </span>
             </div>
             <div className="dual-slider">
               <div className="dual-slider-track" />
               <div className="dual-slider-fill" style={{ left: pctOf(startIdx), right: `${100 - (activeEndIdx / sliderMax) * 100}%` }} />
-              <input type="range" min={0} max={sliderMax} value={startIdx} onChange={handleStartChange} className="slider-thumb" />
-              {rangeMode === 'free' && (
-                <input type="range" min={0} max={sliderMax} value={endIdx} onChange={handleEndChange} className="slider-thumb" />
-              )}
+              <input
+                type="range" min={0} max={sliderMax} value={startIdx}
+                onChange={handleStartChange} onDoubleClick={handleThumbDoubleClick}
+                className="slider-thumb"
+              />
+              <input
+                type="range" min={0} max={sliderMax}
+                value={rangeMode === 'fixed' ? activeEndIdx : endIdx}
+                onChange={handleEndChange} onDoubleClick={handleThumbDoubleClick}
+                className="slider-thumb"
+              />
             </div>
           </div>
         )}
