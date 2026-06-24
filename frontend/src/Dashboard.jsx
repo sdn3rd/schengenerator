@@ -181,6 +181,8 @@ function PhysicsTimeline({ startIdx, endIdx, extendedDays, sliderMax, onStartCha
       const lk  = lockRef.current;
       const dpr = window.devicePixelRatio || 1;
       const { ar, ag, ab } = colRef.current;
+      // Slow 2-second pulse for over-limit ticks (0 → 1 → 0)
+      const pulse = 0.5 + 0.5 * Math.sin(now / 1000 * Math.PI);
 
       // Spin physics
       if (ph.dragTarget !== 'spin') {
@@ -276,23 +278,31 @@ function PhysicsTimeline({ startIdx, endIdx, extendedDays, sliderMax, onStartCha
 
         const baseH = isYear ? 32 : isMonth ? 18 : isWeek ? 7 : 3;
         const tickH = (baseH + mag * 65) * dpr;
-        const alpha = isMonth ? 0.22 + mag * 0.78 : 0.07 + mag * 0.55;
+        const baseAlpha = isMonth ? 0.22 + mag * 0.78 : 0.07 + mag * 0.55;
 
-        let tr = ar, tg = ag, tb = ab;
-        if (pressure && day < pressure.length && pressure[day] > 0.05) {
-          const [cr, cg, cb] = lerpCol(Math.min(1, pressure[day]));
+        const p = pressure && day < pressure.length ? pressure[day] : 0;
+        let tr = ar, tg = ag, tb = ab, alpha = baseAlpha, lw = (isYear ? 2.5 : isMonth ? 1.8 : 0.8) * dpr;
+
+        if (p > 1) {
+          // Over the 90-day limit — pulse red
+          tr = 196; tg = 35; tb = 68;
+          alpha = baseAlpha * (0.3 + 0.7 * pulse);
+          lw = (isYear ? 3 : isMonth ? 2.2 : 1.1) * dpr;
+        } else if (p > 0.05) {
+          // Normal gradient: green (0) → amber (0.67) → red (1)
+          const [cr, cg, cb] = lerpCol(p);
           tr = cr; tg = cg; tb = cb;
         }
 
         ctx.strokeStyle = `rgba(${tr},${tg},${tb},${alpha})`;
-        ctx.lineWidth = (isYear ? 2.5 : isMonth ? 1.8 : 0.8) * dpr;
+        ctx.lineWidth = lw;
         ctx.beginPath();
         ctx.moveTo(x, baseline);
         ctx.lineTo(x, baseline - tickH);
         ctx.stroke();
 
         if (isMonth && tickH > 12 * dpr) {
-          const ta = Math.min(1, (tickH / dpr - 8) / 16) * (0.3 + mag * 0.7);
+          const ta = Math.min(1, (tickH / dpr - 8) / 16) * (0.3 + mag * 0.7) * (p > 1 ? (0.3 + 0.7 * pulse) : 1);
           if (ta > 0.05) {
             ctx.fillStyle = `rgba(${tr},${tg},${tb},${ta})`;
             ctx.font = `${isYear ? '700' : '500'} ${(isYear ? 12 : 10) * dpr}px system-ui,sans-serif`;
@@ -612,7 +622,7 @@ export default function Dashboard({ data, onReset }) {
       ring.push(sch);
       count += sch;
       if (ring.length > 180) count -= ring.shift();
-      pressure[i] = Math.min(1, count / 90);
+      pressure[i] = count / 90; // >1 means over the 90-day limit
     }
     return pressure;
   }, [extendedDays]);
