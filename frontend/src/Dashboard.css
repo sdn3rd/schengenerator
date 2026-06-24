@@ -203,7 +203,7 @@
   text-align: center;
 }
 
-/* Slide rule slider: bar floats centered, dates scroll when bar is dragged */
+/* Suspension bridge slider */
 .date-range-wrap {
   padding: 18px 22px;
   display: flex;
@@ -211,113 +211,70 @@
   gap: 12px;
 }
 
-.slider-section {
+.bridge-wrap {
   position: relative;
-  padding-top: 56px; /* date(18) + line(35) + tip-to-fill(3) = 56 */
+  padding-top: 68px; /* room for big date labels above SVG */
 }
 
-/* Date label column: date text + vertical line, absolutely at bar edge */
-.slide-rule-label {
+/* Big date labels floating above the tower positions */
+.bridge-date-label {
   position: absolute;
   top: 0;
+  transform: translateX(-50%);
+  text-align: center;
+  pointer-events: none;
+  user-select: none;
   display: flex;
   flex-direction: column;
   align-items: center;
-  transform: translateX(-50%);
-  pointer-events: none;
   z-index: 2;
 }
 
-.end-date {
-  font-size: 12px;
-  font-weight: 600;
+.bridge-md {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
   color: var(--text);
+  line-height: 1.15;
   white-space: nowrap;
-  line-height: 18px;
-  transition: color 0.15s;
-  user-select: none;
+  transition: color 0.12s;
 }
 
-.end-date.locked {
+.bridge-md.locked {
   color: var(--accent);
 }
 
-.end-line {
-  width: 1.5px;
-  height: 35px;
-  background: var(--text-muted);
-  opacity: 0.3;
+.bridge-yr {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text2);
+  letter-spacing: 0.04em;
+  opacity: 0.65;
+  white-space: nowrap;
 }
 
-.dual-slider {
-  position: relative;
-  height: 20px;
+/* The SVG itself */
+.bridge-svg {
+  display: block;
   overflow: visible;
 }
 
-.dual-slider-track {
-  position: absolute;
-  top: 8px;
-  left: 0;
-  right: 0;
-  height: 4px;
-  background: var(--surface2);
-  border-radius: 2px;
-  pointer-events: none;
-}
-
-.dual-slider-fill {
-  position: absolute;
-  top: 8px;
-  height: 4px;
-  background: var(--accent);
-  border-radius: 2px;
-  pointer-events: none;
-}
-
-/* The fill bar is draggable to scroll the date window */
-.slide-rule-bar {
+/* SVG interactive elements */
+.bridge-deck {
   cursor: grab;
   pointer-events: all;
 }
-.slide-rule-bar:active {
+.bridge-deck:active {
   cursor: grabbing;
 }
 
-/* Triangle buttons sit on the track at the bar edges */
-.end-triangle-btn {
-  position: absolute;
-  top: -3px; /* triangle tip aligns with fill bar top (8px - 11px = -3px) */
-  transform: translateX(-50%);
-  width: 22px;
-  height: 14px;
-  padding: 0;
-  background: none;
-  border: none;
-  cursor: grab;
+.bridge-cap {
+  cursor: ew-resize;
   pointer-events: all;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  z-index: 3;
+  transition: r 0.1s;
 }
-.end-triangle-btn:active {
-  cursor: grabbing;
-}
-
-.end-triangle-btn::before {
-  content: '';
-  width: 0;
-  height: 0;
-  border-left: 7px solid transparent;
-  border-right: 7px solid transparent;
-  border-top: 11px solid var(--text-muted);
-  transition: border-top-color 0.15s, filter 0.15s;
-}
-
-.end-triangle-btn.locked::before {
-  border-top-color: var(--accent);
-  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--accent) 60%, transparent));
+.bridge-cap:hover {
+  opacity: 0.85;
 }
 
 .slider-bottom-labels {

@@ -56,6 +56,16 @@ function daysBetweenStr(a, b) {
   return Math.max(0, Math.round((db - da) / 86400000));
 }
 
+function formatBridgeDate(dateStr) {
+  if (!dateStr) return { md: '', y: '' };
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  return {
+    md: dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    y: String(y),
+  };
+}
+
 function formatDate(dateStr) {
   if (!dateStr) return '';
   const [y, m, d] = dateStr.split('-').map(Number);
@@ -385,6 +395,54 @@ export default function Dashboard({ data, onReset }) {
   const barWidthPct = (windowSize / (sliderMax + 1)) * 100;
   const barLeftPct = (100 - barWidthPct) / 2;
 
+  // SVG suspension bridge constants (viewBox 0 0 1000 150)
+  const B_LX = barLeftPct * 10;
+  const B_RX = (100 - barLeftPct) * 10;
+  const B_TY = 18;   // tower top y
+  const B_DY = 92;   // deck y
+  const B_CY = 118;  // cable bezier control point y (below deck → dramatic sag)
+
+  const bridgeHangers = useMemo(() => {
+    const n = 14;
+    const result = [];
+    for (let i = 1; i <= n; i++) {
+      const t = i / (n + 1);
+      const x = B_LX + t * (B_RX - B_LX);
+      const cy = (1-t)*(1-t)*B_TY + 2*(1-t)*t*B_CY + t*t*B_TY;
+      if (cy < B_DY) result.push({ x, cy });
+    }
+    return result;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [barLeftPct]);
+
+  const bridgeTicks = useMemo(() => {
+    const start = extendedDays[startIdx]?.date;
+    const end = extendedDays[endIdx]?.date;
+    if (!start || !end) return [];
+    const startMs = new Date(start + 'T00:00:00Z').getTime();
+    const endMs = new Date(end + 'T00:00:00Z').getTime();
+    const totalMs = endMs - startMs;
+    if (totalMs <= 0) return [];
+    const MA = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const result = [];
+    const cur = new Date(startMs);
+    cur.setUTCDate(1);
+    if (new Date(startMs).getUTCDate() !== 1) cur.setUTCMonth(cur.getUTCMonth() + 1);
+    while (cur.getTime() <= endMs) {
+      const frac = (cur.getTime() - startMs) / totalMs;
+      const x = B_LX + frac * (B_RX - B_LX);
+      const m = cur.getUTCMonth();
+      const y = cur.getUTCFullYear();
+      result.push({ x, label: m === 0 ? String(y) : MA[m], major: m === 0 });
+      cur.setUTCMonth(cur.getUTCMonth() + 1);
+    }
+    // thin out if too many ticks
+    if (result.length > 24) return result.filter(t => t.major);
+    if (result.length > 12) return result.filter((t, i) => t.major || i % 3 === 0);
+    return result;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [extendedDays, startIdx, endIdx, barLeftPct]);
+
   const tabDays = useMemo(() => {
     if (tab === 'schengen') {
       return visibleDays.map(d => ({ ...d, countries: d.countries.filter(c => SCHENGEN_COUNTRIES.has(c)) }));
@@ -627,49 +685,126 @@ export default function Dashboard({ data, onReset }) {
                 </button>
               ))}
             </div>
-            <div className="slider-section" ref={sliderRef}>
-              {/* Date labels float at bar edges — dates slide as bar scrolls */}
-              <div className="slide-rule-label" style={{ left: `${barLeftPct}%` }}>
-                <div className={`end-date${lockedThumb === 'start' || lockedThumb === 'both' ? ' locked' : ''}`}>
-                  {formatDate(extendedDays[startIdx]?.date)}
-                </div>
-                <div className="end-line" />
+            <div className="bridge-wrap" ref={sliderRef}>
+              {/* Big date labels — slide through values as bar scrolls */}
+              <div className="bridge-date-label" style={{ left: `${barLeftPct}%` }}>
+                <span className={`bridge-md${lockedThumb === 'start' || lockedThumb === 'both' ? ' locked' : ''}`}>
+                  {formatBridgeDate(extendedDays[startIdx]?.date).md}
+                </span>
+                <span className="bridge-yr">
+                  {formatBridgeDate(extendedDays[startIdx]?.date).y}
+                </span>
               </div>
-              <div className="slide-rule-label" style={{ left: `${100 - barLeftPct}%` }}>
-                <div className={`end-date${lockedThumb === 'end' || lockedThumb === 'both' ? ' locked' : ''}`}>
-                  {formatDate(extendedDays[endIdx]?.date)}
-                </div>
-                <div className="end-line" />
+              <div className="bridge-date-label" style={{ left: `${100 - barLeftPct}%` }}>
+                <span className={`bridge-md${lockedThumb === 'end' || lockedThumb === 'both' ? ' locked' : ''}`}>
+                  {formatBridgeDate(extendedDays[endIdx]?.date).md}
+                </span>
+                <span className="bridge-yr">
+                  {formatBridgeDate(extendedDays[endIdx]?.date).y}
+                </span>
               </div>
-              {/* Centered fixed bar — drag to scroll dates; triangles resize symmetrically */}
-              <div className="dual-slider">
-                <div className="dual-slider-track" />
-                <div
-                  className="dual-slider-fill slide-rule-bar"
-                  style={{ left: `${barLeftPct}%`, right: `${barLeftPct}%` }}
+
+              {/* SVG suspension bridge */}
+              <svg
+                className="bridge-svg"
+                viewBox="0 0 1000 150"
+                preserveAspectRatio="none"
+                width="100%"
+                height="150"
+              >
+                <defs>
+                  <filter id="bridge-glow" x="-20%" y="-20%" width="140%" height="140%">
+                    <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur" />
+                    <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+                  </filter>
+                </defs>
+
+                {/* Full-width ruler track */}
+                <line x1={0} y1={B_DY} x2={1000} y2={B_DY}
+                  stroke="var(--surface2)" strokeWidth={2} />
+
+                {/* Left tower */}
+                <line x1={B_LX} y1={B_TY} x2={B_LX} y2={B_DY + 4}
+                  stroke="var(--accent)" strokeWidth={5} strokeLinecap="round"
+                  filter="url(#bridge-glow)" />
+                {/* Right tower */}
+                <line x1={B_RX} y1={B_TY} x2={B_RX} y2={B_DY + 4}
+                  stroke="var(--accent)" strokeWidth={5} strokeLinecap="round"
+                  filter="url(#bridge-glow)" />
+
+                {/* Main suspension cable */}
+                <path
+                  d={`M ${B_LX},${B_TY} Q ${(B_LX + B_RX) / 2},${B_CY} ${B_RX},${B_TY}`}
+                  stroke="var(--accent)" strokeWidth={3} fill="none" opacity={0.85}
+                  filter="url(#bridge-glow)"
+                />
+
+                {/* Vertical hangers */}
+                {bridgeHangers.map(({ x, cy }, i) => (
+                  <line key={i} x1={x} y1={cy} x2={x} y2={B_DY}
+                    stroke="var(--accent)" strokeWidth={1.5} opacity={0.35} />
+                ))}
+
+                {/* Road deck (draggable) */}
+                <rect
+                  x={B_LX} y={B_DY - 3} width={Math.max(0, B_RX - B_LX)} height={10}
+                  rx={5} fill="var(--accent)"
+                  className="bridge-deck"
                   onMouseDown={handleBarMouseDown}
                   onTouchStart={handleBarTouchStart}
+                  filter="url(#bridge-glow)"
                 />
-                <button
-                  className={`end-triangle-btn${lockedThumb === 'start' || lockedThumb === 'both' ? ' locked' : ''}`}
-                  style={{ left: `${barLeftPct}%` }}
+
+                {/* Tower caps — drag to resize, tap to lock */}
+                <circle
+                  cx={B_LX} cy={B_TY} r={9}
+                  fill={lockedThumb === 'start' || lockedThumb === 'both' ? 'var(--accent)' : 'var(--surface)'}
+                  stroke="var(--accent)" strokeWidth={2.5}
+                  className="bridge-cap"
                   onMouseDown={(e) => handleTriangleMouseDown('start', e)}
                   onTouchStart={(e) => handleTriangleTouchStart('start', e)}
+                  filter={lockedThumb === 'start' || lockedThumb === 'both' ? 'url(#bridge-glow)' : undefined}
                 />
-                <button
-                  className={`end-triangle-btn${lockedThumb === 'end' || lockedThumb === 'both' ? ' locked' : ''}`}
-                  style={{ left: `${100 - barLeftPct}%` }}
+                <circle
+                  cx={B_RX} cy={B_TY} r={9}
+                  fill={lockedThumb === 'end' || lockedThumb === 'both' ? 'var(--accent)' : 'var(--surface)'}
+                  stroke="var(--accent)" strokeWidth={2.5}
+                  className="bridge-cap"
                   onMouseDown={(e) => handleTriangleMouseDown('end', e)}
                   onTouchStart={(e) => handleTriangleTouchStart('end', e)}
+                  filter={lockedThumb === 'end' || lockedThumb === 'both' ? 'url(#bridge-glow)' : undefined}
                 />
-              </div>
+
+                {/* Ruler ticks + month labels */}
+                {bridgeTicks.map(({ x, label, major }, i) => (
+                  <g key={i}>
+                    <line
+                      x1={x} y1={B_DY + 10} x2={x} y2={B_DY + (major ? 26 : 18)}
+                      stroke="var(--text-muted)" strokeWidth={major ? 2 : 1} opacity={0.5}
+                    />
+                    <text
+                      x={x} y={B_DY + (major ? 44 : 36)}
+                      textAnchor="middle"
+                      style={{
+                        fontSize: major ? '12px' : '10px',
+                        fontFamily: 'system-ui, -apple-system, sans-serif',
+                        fontWeight: major ? 700 : 500,
+                        fill: 'var(--text-muted)',
+                        opacity: major ? 0.7 : 0.45,
+                      }}
+                    >
+                      {label}
+                    </text>
+                  </g>
+                ))}
+              </svg>
             </div>
             <div className="slider-bottom-labels">
               <span>{formatDate(extendedDays[startIdx]?.date)}</span>
               <span className="slider-window-size">{windowSize}d</span>
               <span>{formatDate(extendedDays[endIdx]?.date)}</span>
             </div>
-            <div className="range-hint">drag bar to scroll · drag ▼ to resize · tap ▼ to lock</div>
+            <div className="range-hint">drag deck to scroll · drag ● to resize · tap ● to lock</div>
           </div>
         )}
       </div>
