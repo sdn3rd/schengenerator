@@ -199,7 +199,6 @@ export default function Dashboard({ data, onReset }) {
   // null=free, 'start'=left pinned, 'end'=right pinned, 'both'=drag fill to slide
   const [lockedThumb, setLockedThumb] = useState(null);
   const sliderRef = useRef(null);
-  const dragRef = useRef(null);
 
   // Extend the days array 366 days into the future with empty entries so the
   // slider can project forward past the last recorded travel date.
@@ -214,16 +213,6 @@ export default function Dashboard({ data, onReset }) {
   }, [days]);
 
   const sliderMax = extendedDays.length - 1;
-  const pctOf = idx => `${(idx / sliderMax) * 100}%`;
-
-  const handleStartChange = e => {
-    if (lockedThumb === 'start' || lockedThumb === 'both') return;
-    setStartIdx(Math.min(Number(e.target.value), endIdx - 1));
-  };
-  const handleEndChange = e => {
-    if (lockedThumb === 'end' || lockedThumb === 'both') return;
-    setEndIdx(Math.max(Number(e.target.value), startIdx + 1));
-  };
 
   function handleStartLockToggle() {
     setLockedThumb(prev => {
@@ -242,7 +231,8 @@ export default function Dashboard({ data, onReset }) {
     });
   }
 
-  const handleFillMouseDown = (e) => {
+  // Body drag: scroll dates without moving the bar (windowSize stays constant → barLeftPct stays constant)
+  const handleBarMouseDown = (e) => {
     e.preventDefault();
     const rect = sliderRef.current.getBoundingClientRect();
     const wLen = endIdx - startIdx;
@@ -250,7 +240,6 @@ export default function Dashboard({ data, onReset }) {
     const startStart = startIdx;
     const handlers = {};
     const cleanup = () => {
-      dragRef.current = null;
       document.removeEventListener('mousemove', handlers.move);
       document.removeEventListener('mouseup', cleanup);
     };
@@ -261,12 +250,11 @@ export default function Dashboard({ data, onReset }) {
       setEndIdx(clamped + wLen);
       if (raw <= 0 || raw + wLen >= sliderMax) cleanup();
     };
-    dragRef.current = true;
     document.addEventListener('mousemove', handlers.move);
     document.addEventListener('mouseup', cleanup);
   };
 
-  const handleFillTouchStart = (e) => {
+  const handleBarTouchStart = (e) => {
     e.preventDefault();
     const touch = e.touches[0];
     const rect = sliderRef.current.getBoundingClientRect();
@@ -275,7 +263,6 @@ export default function Dashboard({ data, onReset }) {
     const startStart = startIdx;
     const handlers = {};
     const cleanup = () => {
-      dragRef.current = null;
       document.removeEventListener('touchmove', handlers.move);
       document.removeEventListener('touchend', cleanup);
     };
@@ -287,18 +274,81 @@ export default function Dashboard({ data, onReset }) {
       setEndIdx(clamped + wLen);
       if (raw <= 0 || raw + wLen >= sliderMax) cleanup();
     };
-    dragRef.current = true;
     document.addEventListener('touchmove', handlers.move, { passive: false });
     document.addEventListener('touchend', cleanup);
   };
 
+  // Triangle drag: symmetric resize from center. Tap (no drag) toggles lock.
+  const handleTriangleMouseDown = (side, e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const rect = sliderRef.current.getBoundingClientRect();
+    const centerAtStart = Math.round((startIdx + endIdx) / 2);
+    const halfAtStart = Math.round((endIdx - startIdx) / 2);
+    let dragged = false;
+    const handlers = {};
+    const cleanup = () => {
+      document.removeEventListener('mousemove', handlers.move);
+      document.removeEventListener('mouseup', handlers.up);
+    };
+    handlers.move = (ev) => {
+      if (Math.abs(ev.clientX - startX) > 4) dragged = true;
+      if (!dragged) return;
+      const delta = Math.round(((ev.clientX - startX) / rect.width) * sliderMax);
+      const newHalf = Math.max(1, side === 'start' ? halfAtStart - delta : halfAtStart + delta);
+      setStartIdx(Math.max(0, centerAtStart - newHalf));
+      setEndIdx(Math.min(sliderMax, centerAtStart + newHalf));
+    };
+    handlers.up = () => {
+      if (!dragged) {
+        if (side === 'start') handleStartLockToggle();
+        else handleEndLockToggle();
+      }
+      cleanup();
+    };
+    document.addEventListener('mousemove', handlers.move);
+    document.addEventListener('mouseup', handlers.up);
+  };
+
+  const handleTriangleTouchStart = (side, e) => {
+    e.preventDefault();
+    const startX = e.touches[0].clientX;
+    const rect = sliderRef.current.getBoundingClientRect();
+    const centerAtStart = Math.round((startIdx + endIdx) / 2);
+    const halfAtStart = Math.round((endIdx - startIdx) / 2);
+    let dragged = false;
+    const handlers = {};
+    const cleanup = () => {
+      document.removeEventListener('touchmove', handlers.move);
+      document.removeEventListener('touchend', handlers.up);
+    };
+    handlers.move = (ev) => {
+      ev.preventDefault();
+      if (Math.abs(ev.touches[0].clientX - startX) > 4) dragged = true;
+      if (!dragged) return;
+      const delta = Math.round(((ev.touches[0].clientX - startX) / rect.width) * sliderMax);
+      const newHalf = Math.max(1, side === 'start' ? halfAtStart - delta : halfAtStart + delta);
+      setStartIdx(Math.max(0, centerAtStart - newHalf));
+      setEndIdx(Math.min(sliderMax, centerAtStart + newHalf));
+    };
+    handlers.up = () => {
+      if (!dragged) {
+        if (side === 'start') handleStartLockToggle();
+        else handleEndLockToggle();
+      }
+      cleanup();
+    };
+    document.addEventListener('touchmove', handlers.move, { passive: false });
+    document.addEventListener('touchend', handlers.up);
+  };
+
   function applyPreset(n) {
-    if (lockedThumb === 'start') {
-      setEndIdx(Math.min(sliderMax, startIdx + n - 1));
-    } else {
-      setStartIdx(Math.max(0, endIdx - n + 1));
-    }
-    setLockedThumb('both');
+    const currentCenter = Math.round((startIdx + endIdx) / 2);
+    const half = Math.floor(n / 2);
+    const ns = Math.max(0, currentCenter - half);
+    const ne = Math.min(sliderMax, ns + n - 1);
+    setStartIdx(ns);
+    setEndIdx(ne);
   }
 
   // Collapsible sections
@@ -332,6 +382,8 @@ export default function Dashboard({ data, onReset }) {
     [extendedDays, startIdx, endIdx]
   );
   const windowSize = endIdx - startIdx + 1;
+  const barWidthPct = (windowSize / (sliderMax + 1)) * 100;
+  const barLeftPct = (100 - barWidthPct) / 2;
 
   const tabDays = useMemo(() => {
     if (tab === 'schengen') {
@@ -576,52 +628,48 @@ export default function Dashboard({ data, onReset }) {
               ))}
             </div>
             <div className="slider-section" ref={sliderRef}>
-              {/* Start marker: sliding date → line → ▼ triangle (tap to lock) */}
-              <div className="slider-end-marker" style={{ left: pctOf(startIdx) }}>
+              {/* Date labels float at bar edges — dates slide as bar scrolls */}
+              <div className="slide-rule-label" style={{ left: `${barLeftPct}%` }}>
                 <div className={`end-date${lockedThumb === 'start' || lockedThumb === 'both' ? ' locked' : ''}`}>
                   {formatDate(extendedDays[startIdx]?.date)}
                 </div>
                 <div className="end-line" />
-                <button
-                  className={`end-triangle-btn${lockedThumb === 'start' || lockedThumb === 'both' ? ' locked' : ''}`}
-                  onClick={handleStartLockToggle}
-                  title={lockedThumb === 'start' || lockedThumb === 'both' ? 'Unlock start' : 'Lock start'}
-                />
               </div>
-              {/* End marker: sliding date → line → ▼ triangle (tap to lock) */}
-              <div className="slider-end-marker" style={{ left: pctOf(endIdx) }}>
+              <div className="slide-rule-label" style={{ left: `${100 - barLeftPct}%` }}>
                 <div className={`end-date${lockedThumb === 'end' || lockedThumb === 'both' ? ' locked' : ''}`}>
                   {formatDate(extendedDays[endIdx]?.date)}
                 </div>
                 <div className="end-line" />
-                <button
-                  className={`end-triangle-btn${lockedThumb === 'end' || lockedThumb === 'both' ? ' locked' : ''}`}
-                  onClick={handleEndLockToggle}
-                  title={lockedThumb === 'end' || lockedThumb === 'both' ? 'Unlock end' : 'Lock end'}
-                />
               </div>
-              {/* Bar — floats centered below the markers */}
+              {/* Centered fixed bar — drag to scroll dates; triangles resize symmetrically */}
               <div className="dual-slider">
                 <div className="dual-slider-track" />
-                <div className="dual-slider-fill" style={{ left: pctOf(startIdx), right: `${100 - (endIdx / sliderMax) * 100}%` }} />
-                <input type="range" min={0} max={sliderMax} value={startIdx} onChange={handleStartChange} className="slider-thumb-hidden" />
-                <input type="range" min={0} max={sliderMax} value={endIdx} onChange={handleEndChange} className="slider-thumb-hidden" />
-                {lockedThumb === 'both' && (
-                  <div className="slider-drag-overlay" onMouseDown={handleFillMouseDown} onTouchStart={handleFillTouchStart} />
-                )}
+                <div
+                  className="dual-slider-fill slide-rule-bar"
+                  style={{ left: `${barLeftPct}%`, right: `${barLeftPct}%` }}
+                  onMouseDown={handleBarMouseDown}
+                  onTouchStart={handleBarTouchStart}
+                />
+                <button
+                  className={`end-triangle-btn${lockedThumb === 'start' || lockedThumb === 'both' ? ' locked' : ''}`}
+                  style={{ left: `${barLeftPct}%` }}
+                  onMouseDown={(e) => handleTriangleMouseDown('start', e)}
+                  onTouchStart={(e) => handleTriangleTouchStart('start', e)}
+                />
+                <button
+                  className={`end-triangle-btn${lockedThumb === 'end' || lockedThumb === 'both' ? ' locked' : ''}`}
+                  style={{ left: `${100 - barLeftPct}%` }}
+                  onMouseDown={(e) => handleTriangleMouseDown('end', e)}
+                  onTouchStart={(e) => handleTriangleTouchStart('end', e)}
+                />
               </div>
             </div>
-            {/* Fixed summary below the bar */}
             <div className="slider-bottom-labels">
               <span>{formatDate(extendedDays[startIdx]?.date)}</span>
               <span className="slider-window-size">{windowSize}d</span>
               <span>{formatDate(extendedDays[endIdx]?.date)}</span>
             </div>
-            <div className="range-hint">
-              {lockedThumb === 'both'
-                ? 'drag the bar · tap ▼ to unlock a side'
-                : 'tap ▼ to lock a side · lock both to drag'}
-            </div>
+            <div className="range-hint">drag bar to scroll · drag ▼ to resize · tap ▼ to lock</div>
           </div>
         )}
       </div>

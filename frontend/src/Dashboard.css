@@ -203,7 +203,7 @@
   text-align: center;
 }
 
-/* Slider section: date → line → ▼ triangle → bar → summary below */
+/* Slide rule slider: bar floats centered, dates scroll when bar is dragged */
 .date-range-wrap {
   padding: 18px 22px;
   display: flex;
@@ -213,10 +213,11 @@
 
 .slider-section {
   position: relative;
-  padding-top: 56px; /* date(18) + line(24) + triangle(14) */
+  padding-top: 56px; /* date(18) + line(35) + tip-to-fill(3) = 56 */
 }
 
-.slider-end-marker {
+/* Date label column: date text + vertical line, absolutely at bar edge */
+.slide-rule-label {
   position: absolute;
   top: 0;
   display: flex;
@@ -243,37 +244,9 @@
 
 .end-line {
   width: 1.5px;
-  height: 24px;
+  height: 35px;
   background: var(--text-muted);
   opacity: 0.3;
-}
-
-.end-triangle-btn {
-  width: 14px;
-  height: 14px;
-  padding: 0;
-  background: none;
-  border: none;
-  cursor: pointer;
-  pointer-events: all;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-}
-
-.end-triangle-btn::before {
-  content: '';
-  width: 0;
-  height: 0;
-  border-left: 7px solid transparent;
-  border-right: 7px solid transparent;
-  border-top: 11px solid var(--text-muted);
-  transition: border-top-color 0.15s, filter 0.15s;
-}
-
-.end-triangle-btn.locked::before {
-  border-top-color: var(--accent);
-  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--accent) 60%, transparent));
 }
 
 .dual-slider {
@@ -302,6 +275,51 @@
   pointer-events: none;
 }
 
+/* The fill bar is draggable to scroll the date window */
+.slide-rule-bar {
+  cursor: grab;
+  pointer-events: all;
+}
+.slide-rule-bar:active {
+  cursor: grabbing;
+}
+
+/* Triangle buttons sit on the track at the bar edges */
+.end-triangle-btn {
+  position: absolute;
+  top: -3px; /* triangle tip aligns with fill bar top (8px - 11px = -3px) */
+  transform: translateX(-50%);
+  width: 22px;
+  height: 14px;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: grab;
+  pointer-events: all;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  z-index: 3;
+}
+.end-triangle-btn:active {
+  cursor: grabbing;
+}
+
+.end-triangle-btn::before {
+  content: '';
+  width: 0;
+  height: 0;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-top: 11px solid var(--text-muted);
+  transition: border-top-color 0.15s, filter 0.15s;
+}
+
+.end-triangle-btn.locked::before {
+  border-top-color: var(--accent);
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--accent) 60%, transparent));
+}
+
 .slider-bottom-labels {
   display: flex;
   justify-content: space-between;
@@ -314,61 +332,6 @@
   font-size: 11px;
   font-weight: 700;
   color: var(--accent);
-}
-
-/* Invisible native range input — provides drag hit area */
-.slider-thumb-hidden {
-  position: absolute;
-  width: 100%;
-  top: 0;
-  height: 20px;
-  appearance: none;
-  -webkit-appearance: none;
-  background: transparent;
-  pointer-events: none;
-  outline: none;
-  margin: 0;
-  padding: 0;
-  opacity: 0;
-}
-
-.slider-thumb-hidden::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 22px;
-  height: 22px;
-  background: transparent;
-  border: none;
-  box-shadow: none;
-  border-radius: 0;
-  cursor: pointer;
-  pointer-events: all;
-  margin-top: -1px;
-  opacity: 0;
-}
-
-.slider-thumb-hidden::-moz-range-thumb {
-  width: 22px;
-  height: 22px;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  pointer-events: all;
-  opacity: 0;
-}
-
-.slider-drag-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  cursor: grab;
-  z-index: 10;
-}
-
-.slider-drag-overlay:active {
-  cursor: grabbing;
 }
 
 /* Status bar */
