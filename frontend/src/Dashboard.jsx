@@ -75,25 +75,42 @@ function formatDate(dateStr) {
   });
 }
 
-function PhysicsTimeline({ centerIdx, windowSize, extendedDays, sliderMax, onCenterChange }) {
+function PhysicsTimeline({ startIdx, endIdx, extendedDays, sliderMax, onStartChange, onEndChange, schengenPressure }) {
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
-  const physRef = useRef({ pos: centerIdx, vel: 0, dragging: false, startX: 0, startPos: 0, lastX: 0, lastT: 0, dragVel: 0 });
+  const physRef = useRef({
+    pos: (startIdx + endIdx) / 2,
+    vel: 0,
+    dragTarget: null,
+    startX: 0,
+    startPos: 0,
+    startBarIdx: 0,
+    endBarIdx: 0,
+    lastX: 0,
+    lastT: 0,
+    dragVel: 0,
+  });
+  // lock state lives only in a ref — RAF reads it directly each frame
+  const lockRef = useRef({ start: false, end: true });
+  const idxRef = useRef({ startIdx, endIdx });
+  const cbRef = useRef({ onStartChange, onEndChange });
+  const pressureRef = useRef(schengenPressure);
   const colRef = useRef({ ar: 79, ag: 140, ab: 255 });
-  const wsRef = useRef(windowSize);
-  const lastNotifiedRef = useRef(Math.round(centerIdx));
 
-  useEffect(() => { wsRef.current = windowSize; }, [windowSize]);
+  useEffect(() => { idxRef.current = { startIdx, endIdx }; }, [startIdx, endIdx]);
+  useEffect(() => { cbRef.current = { onStartChange, onEndChange }; }, [onStartChange, onEndChange]);
+  useEffect(() => { pressureRef.current = schengenPressure; }, [schengenPressure]);
 
-  // Snap to externally-driven center changes (presets)
+  // Snap view to new center when bars jump far (preset applied)
   useEffect(() => {
-    if (Math.round(physRef.current.pos) !== centerIdx) {
-      physRef.current.pos = centerIdx;
-      physRef.current.vel = 0;
+    const center = (startIdx + endIdx) / 2;
+    const ph = physRef.current;
+    if (Math.abs(ph.pos - center) > 50) {
+      ph.pos = center;
+      ph.vel = 0;
     }
-  }, [centerIdx]);
+  }, [startIdx, endIdx]);
 
-  // Read accent color from CSS once on mount
   useEffect(() => {
     try {
       const v = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
@@ -103,11 +120,10 @@ function PhysicsTimeline({ centerIdx, windowSize, extendedDays, sliderMax, onCen
     } catch {}
   }, []);
 
-  // HiDPI canvas resize
   useEffect(() => {
     const canvas = canvasRef.current;
     const wrap = wrapRef.current;
-    const H_CSS = 150;
+    const H_CSS = 170;
     function resize() {
       const dpr = window.devicePixelRatio || 1;
       const w = wrap.getBoundingClientRect().width;
@@ -122,31 +138,46 @@ function PhysicsTimeline({ centerIdx, windowSize, extendedDays, sliderMax, onCen
     return () => ro.disconnect();
   }, []);
 
-  // Main RAF: physics simulation + canvas draw
   useEffect(() => {
     const canvas = canvasRef.current;
     let rafId;
     let lastTime = performance.now();
-    const PX_PER_DAY = 10; // css px per day
+    const PX_PER_DAY = 10;
+
+    const colorStops = [
+      { r: 38,  g: 122, b: 66  }, // green  — 0 days used
+      { r: 180, g: 111, b: 9   }, // amber  — 60 days used
+      { r: 196, g: 35,  b: 68  }, // red    — 90 days used
+    ];
+
+    function lerpCol(t) {
+      const n = colorStops.length - 1;
+      const seg = t * n;
+      const i = Math.min(Math.floor(seg), n - 1);
+      const f = seg - i;
+      const a = colorStops[i], b = colorStops[i + 1];
+      return [
+        Math.round(a.r + (b.r - a.r) * f),
+        Math.round(a.g + (b.g - a.g) * f),
+        Math.round(a.b + (b.b - a.b) * f),
+      ];
+    }
 
     function loop(now) {
       const dt = Math.min((now - lastTime) / 1000, 0.05);
       lastTime = now;
       const ph = physRef.current;
+      const lk = lockRef.current;
+      const idx = idxRef.current;
       const dpr = window.devicePixelRatio || 1;
       const { ar, ag, ab } = colRef.current;
 
-      if (!ph.dragging) {
+      // Physics spring — only when not dragging
+      if (!ph.dragTarget) {
         ph.vel *= Math.exp(-6 * dt);
-        const target = Math.round(ph.pos);
-        ph.vel += (target - ph.pos) * 160 * dt;
+        ph.vel += (Math.round(ph.pos) - ph.pos) * 160 * dt;
         ph.pos += ph.vel * dt;
         ph.pos = Math.max(0, Math.min(sliderMax, ph.pos));
-        const rounded = Math.round(ph.pos);
-        if (rounded !== lastNotifiedRef.current && Math.abs(ph.vel) < 1.5) {
-          lastNotifiedRef.current = rounded;
-          onCenterChange(rounded);
-        }
       }
 
       const ctx = canvas.getContext('2d');
@@ -155,30 +186,25 @@ function PhysicsTimeline({ centerIdx, windowSize, extendedDays, sliderMax, onCen
       ctx.clearRect(0, 0, W, H);
 
       const centerX = W / 2;
-      const baseline = H * 0.6;
+      const baseline = H * 0.55;
       const pxDay = PX_PER_DAY * dpr;
+
+      const startBarX = centerX + (idx.startIdx - ph.pos) * pxDay;
+      const endBarX   = centerX + (idx.endIdx   - ph.pos) * pxDay;
 
       // Faint baseline rule
       ctx.strokeStyle = `rgba(${ar},${ag},${ab},0.1)`;
       ctx.lineWidth = dpr;
       ctx.beginPath(); ctx.moveTo(0, baseline); ctx.lineTo(W, baseline); ctx.stroke();
 
-      // Window band
-      const halfW = (wsRef.current / 2) * pxDay;
-      ctx.fillStyle = `rgba(${ar},${ag},${ab},0.07)`;
-      ctx.fillRect(centerX - halfW, 0, halfW * 2, baseline);
+      // Window band between the two bars
+      if (startBarX < endBarX) {
+        ctx.fillStyle = `rgba(${ar},${ag},${ab},0.07)`;
+        ctx.fillRect(startBarX, 0, endBarX - startBarX, baseline);
+      }
 
-      // Window edge dashes
-      ctx.strokeStyle = `rgba(${ar},${ag},${ab},0.3)`;
-      ctx.lineWidth = 1.5 * dpr;
-      ctx.setLineDash([4*dpr, 4*dpr]);
-      ctx.beginPath();
-      ctx.moveTo(centerX - halfW, 0); ctx.lineTo(centerX - halfW, baseline);
-      ctx.moveTo(centerX + halfW, 0); ctx.lineTo(centerX + halfW, baseline);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      // Ticks — stretch upward magnetically near center
+      // Ticks — magnetic stretch toward center, colorized by Schengen pressure
+      const pressure = pressureRef.current;
       const visRange = Math.ceil(W / pxDay) + 4;
       const d0 = Math.floor(ph.pos - visRange / 2);
       const d1 = Math.ceil(ph.pos + visRange / 2);
@@ -190,18 +216,24 @@ function PhysicsTimeline({ centerIdx, windowSize, extendedDays, sliderMax, onCen
         const m = parseInt(ds.slice(5, 7));
         const d = parseInt(ds.slice(8, 10));
         const isMonth = d === 1;
-        const isYear = isMonth && m === 1;
-        const isWeek = d % 7 === 1;
+        const isYear  = isMonth && m === 1;
+        const isWeek  = d % 7 === 1;
 
-        const dist = Math.abs(x - centerX);
-        const t = Math.max(0, 1 - dist / (W * 0.3));
+        const distFromCenter = Math.abs(x - centerX);
+        const t = Math.max(0, 1 - distFromCenter / (W * 0.3));
         const mag = t * t * t;
 
         const baseH = isYear ? 32 : isMonth ? 18 : isWeek ? 7 : 3;
         const tickH = (baseH + mag * 62) * dpr;
         const alpha = isMonth ? 0.25 + mag * 0.75 : 0.08 + mag * 0.5;
 
-        ctx.strokeStyle = `rgba(${ar},${ag},${ab},${alpha})`;
+        let tr = ar, tg = ag, tb = ab;
+        if (pressure && day < pressure.length && pressure[day] > 0.05) {
+          const [cr, cg, cb] = lerpCol(Math.min(1, pressure[day]));
+          tr = cr; tg = cg; tb = cb;
+        }
+
+        ctx.strokeStyle = `rgba(${tr},${tg},${tb},${alpha})`;
         ctx.lineWidth = (isYear ? 2.5 : isMonth ? 1.8 : 0.8) * dpr;
         ctx.beginPath();
         ctx.moveTo(x, baseline);
@@ -211,7 +243,7 @@ function PhysicsTimeline({ centerIdx, windowSize, extendedDays, sliderMax, onCen
         if (isMonth && tickH > 12 * dpr) {
           const ta = Math.min(1, (tickH / dpr - 8) / 16) * (0.3 + mag * 0.7);
           if (ta > 0.05) {
-            ctx.fillStyle = `rgba(${ar},${ag},${ab},${ta})`;
+            ctx.fillStyle = `rgba(${tr},${tg},${tb},${ta})`;
             ctx.font = `${isYear ? '700' : '500'} ${(isYear ? 12 : 10) * dpr}px system-ui,sans-serif`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'top';
@@ -220,54 +252,106 @@ function PhysicsTimeline({ centerIdx, windowSize, extendedDays, sliderMax, onCen
         }
       }
 
-      // Center cursor
-      ctx.strokeStyle = `rgba(${ar},${ag},${ab},0.85)`;
-      ctx.lineWidth = 2 * dpr;
-      ctx.beginPath(); ctx.moveTo(centerX, 0); ctx.lineTo(centerX, baseline); ctx.stroke();
-      ctx.fillStyle = `rgba(${ar},${ag},${ab},1)`;
-      ctx.beginPath(); ctx.arc(centerX, baseline, 5*dpr, 0, Math.PI*2); ctx.fill();
+      // Draw a vertical bar with lock/free label
+      function drawBar(bx, isLocked) {
+        const br = isLocked ? 255 : ar;
+        const bg = isLocked ? 180 : ag;
+        const bb = isLocked ? 50  : ab;
+        ctx.strokeStyle = `rgba(${br},${bg},${bb},0.9)`;
+        ctx.lineWidth = 2.5 * dpr;
+        ctx.beginPath(); ctx.moveTo(bx, 0); ctx.lineTo(bx, baseline); ctx.stroke();
+        ctx.fillStyle = `rgba(${br},${bg},${bb},1)`;
+        ctx.beginPath(); ctx.arc(bx, baseline, 5 * dpr, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = `rgba(${br},${bg},${bb},0.55)`;
+        ctx.font = `700 ${8 * dpr}px system-ui,sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillText(isLocked ? 'LOCK' : 'FREE', bx, baseline + 10 * dpr);
+      }
+
+      drawBar(startBarX, lk.start);
+      drawBar(endBarX,   lk.end);
 
       rafId = requestAnimationFrame(loop);
     }
 
     rafId = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(rafId);
-  }, [extendedDays, sliderMax, onCenterChange]);
+  }, [extendedDays, sliderMax]);
 
-  // Pointer events — drag to spin, release with momentum
   const handlePointerDown = useCallback((e) => {
     e.preventDefault();
-    const ph = physRef.current;
+    const canvas = canvasRef.current;
     const dpr = window.devicePixelRatio || 1;
-    ph.dragging = true;
-    ph.vel = 0;
-    ph.startX = e.clientX;
-    ph.startPos = ph.pos;
-    ph.lastX = e.clientX;
-    ph.lastT = performance.now();
-    ph.dragVel = 0;
+    const ph = physRef.current;
+    const lk = lockRef.current;
+    const idx = idxRef.current;
+    const PX_PER_DAY = 10;
+
+    const rect = canvas.getBoundingClientRect();
+    const clickX = (e.clientX - rect.left) * dpr;
+    const W = canvas.width;
+    const centerX = W / 2;
+    const pxDay = PX_PER_DAY * dpr;
+
+    const startBarX = centerX + (idx.startIdx - ph.pos) * pxDay;
+    const endBarX   = centerX + (idx.endIdx   - ph.pos) * pxDay;
+    const dStart = Math.abs(clickX - startBarX);
+    const dEnd   = Math.abs(clickX - endBarX);
+    const HIT = 22 * dpr;
+
+    let target = 'view';
+    if (dStart < HIT && dStart <= dEnd) target = 'start';
+    else if (dEnd < HIT) target = 'end';
+
+    ph.dragTarget   = target;
+    ph.startX       = e.clientX;
+    ph.startPos     = ph.pos;
+    ph.startBarIdx  = idx.startIdx;
+    ph.endBarIdx    = idx.endIdx;
+    ph.lastX        = e.clientX;
+    ph.lastT        = performance.now();
+    ph.dragVel      = 0;
+    if (target === 'view') ph.vel = 0;
+
+    let dragged = false;
 
     const onMove = (ev) => {
+      if (Math.abs(ev.clientX - ph.startX) > 4) dragged = true;
+      if (!dragged) return;
       const x = ev.clientX;
       const now = performance.now();
       const moveDt = Math.max(0.001, (now - ph.lastT) / 1000);
-      ph.dragVel = -(x - ph.lastX) / (10 * dpr) / moveDt;
-      ph.lastX = x; ph.lastT = now;
-      ph.pos = Math.max(0, Math.min(sliderMax, ph.startPos - (x - ph.startX) / (10 * dpr)));
-      lastNotifiedRef.current = Math.round(ph.pos);
-      onCenterChange(Math.round(ph.pos));
+
+      if (target === 'view') {
+        ph.dragVel = -(x - ph.lastX) / PX_PER_DAY / moveDt;
+        ph.pos = Math.max(0, Math.min(sliderMax, ph.startPos - (x - ph.startX) / PX_PER_DAY));
+      } else if (target === 'start' && !lk.start) {
+        const ni = Math.round(ph.startBarIdx + (x - ph.startX) / PX_PER_DAY);
+        cbRef.current.onStartChange(Math.max(0, Math.min(idx.endIdx - 1, ni)));
+      } else if (target === 'end' && !lk.end) {
+        const ni = Math.round(ph.endBarIdx + (x - ph.startX) / PX_PER_DAY);
+        cbRef.current.onEndChange(Math.max(idx.startIdx + 1, Math.min(sliderMax, ni)));
+      }
+
+      ph.lastX = x;
+      ph.lastT = now;
     };
 
     const onUp = () => {
-      ph.dragging = false;
-      ph.vel = ph.dragVel * 0.6;
+      if (!dragged) {
+        if (target === 'start') lockRef.current = { ...lockRef.current, start: !lockRef.current.start };
+        else if (target === 'end') lockRef.current = { ...lockRef.current, end: !lockRef.current.end };
+      }
+      if (target === 'view') ph.vel = ph.dragVel * 0.6;
+      ph.dragTarget = null;
       document.removeEventListener('pointermove', onMove);
       document.removeEventListener('pointerup', onUp);
     };
 
     document.addEventListener('pointermove', onMove);
     document.addEventListener('pointerup', onUp);
-  }, [sliderMax, onCenterChange]);
+  }, [sliderMax]);
 
   return (
     <div ref={wrapRef} className="physics-timeline-wrap">
@@ -412,11 +496,6 @@ export default function Dashboard({ data, onReset }) {
   const defaultStart = Math.max(0, days.length - 180);
   const [startIdx, setStartIdx] = useState(defaultStart);
   const [endIdx, setEndIdx] = useState(days.length - 1);
-  // null=free, 'start'=left pinned, 'end'=right pinned, 'both'=drag fill to slide
-  const [lockedThumb, setLockedThumb] = useState(null);
-  const sliderRef = useRef(null);
-  const windowSizeRef = useRef(0);
-
   // Extend the days array 366 days into the future with empty entries so the
   // slider can project forward past the last recorded travel date.
   const extendedDays = useMemo(() => {
@@ -431,141 +510,9 @@ export default function Dashboard({ data, onReset }) {
 
   const sliderMax = extendedDays.length - 1;
 
-  function handleStartLockToggle() {
-    setLockedThumb(prev => {
-      if (prev === 'start') return null;
-      if (prev === 'both') return 'end';
-      if (prev === 'end') return 'both';
-      return 'start';
-    });
-  }
-  function handleEndLockToggle() {
-    setLockedThumb(prev => {
-      if (prev === 'end') return null;
-      if (prev === 'both') return 'start';
-      if (prev === 'start') return 'both';
-      return 'end';
-    });
-  }
-
-  // Body drag: scroll dates without moving the bar (windowSize stays constant → barLeftPct stays constant)
-  const handleBarMouseDown = (e) => {
-    e.preventDefault();
-    const rect = sliderRef.current.getBoundingClientRect();
-    const wLen = endIdx - startIdx;
-    const startX = e.clientX;
-    const startStart = startIdx;
-    const handlers = {};
-    const cleanup = () => {
-      document.removeEventListener('mousemove', handlers.move);
-      document.removeEventListener('mouseup', cleanup);
-    };
-    handlers.move = (ev) => {
-      const raw = startStart + Math.round(((ev.clientX - startX) / rect.width) * sliderMax);
-      const clamped = Math.max(0, Math.min(raw, sliderMax - wLen));
-      setStartIdx(clamped);
-      setEndIdx(clamped + wLen);
-      if (raw <= 0 || raw + wLen >= sliderMax) cleanup();
-    };
-    document.addEventListener('mousemove', handlers.move);
-    document.addEventListener('mouseup', cleanup);
-  };
-
-  const handleBarTouchStart = (e) => {
-    e.preventDefault();
-    const touch = e.touches[0];
-    const rect = sliderRef.current.getBoundingClientRect();
-    const wLen = endIdx - startIdx;
-    const startX = touch.clientX;
-    const startStart = startIdx;
-    const handlers = {};
-    const cleanup = () => {
-      document.removeEventListener('touchmove', handlers.move);
-      document.removeEventListener('touchend', cleanup);
-    };
-    handlers.move = (ev) => {
-      ev.preventDefault();
-      const raw = startStart + Math.round(((ev.touches[0].clientX - startX) / rect.width) * sliderMax);
-      const clamped = Math.max(0, Math.min(raw, sliderMax - wLen));
-      setStartIdx(clamped);
-      setEndIdx(clamped + wLen);
-      if (raw <= 0 || raw + wLen >= sliderMax) cleanup();
-    };
-    document.addEventListener('touchmove', handlers.move, { passive: false });
-    document.addEventListener('touchend', cleanup);
-  };
-
-  // Triangle drag: symmetric resize from center. Tap (no drag) toggles lock.
-  const handleTriangleMouseDown = (side, e) => {
-    e.preventDefault();
-    const startX = e.clientX;
-    const rect = sliderRef.current.getBoundingClientRect();
-    const centerAtStart = Math.round((startIdx + endIdx) / 2);
-    const halfAtStart = Math.round((endIdx - startIdx) / 2);
-    let dragged = false;
-    const handlers = {};
-    const cleanup = () => {
-      document.removeEventListener('mousemove', handlers.move);
-      document.removeEventListener('mouseup', handlers.up);
-    };
-    handlers.move = (ev) => {
-      if (Math.abs(ev.clientX - startX) > 4) dragged = true;
-      if (!dragged) return;
-      const delta = Math.round(((ev.clientX - startX) / rect.width) * sliderMax);
-      const newHalf = Math.max(1, side === 'start' ? halfAtStart - delta : halfAtStart + delta);
-      setStartIdx(Math.max(0, centerAtStart - newHalf));
-      setEndIdx(Math.min(sliderMax, centerAtStart + newHalf));
-    };
-    handlers.up = () => {
-      if (!dragged) {
-        if (side === 'start') handleStartLockToggle();
-        else handleEndLockToggle();
-      }
-      cleanup();
-    };
-    document.addEventListener('mousemove', handlers.move);
-    document.addEventListener('mouseup', handlers.up);
-  };
-
-  const handleTriangleTouchStart = (side, e) => {
-    e.preventDefault();
-    const startX = e.touches[0].clientX;
-    const rect = sliderRef.current.getBoundingClientRect();
-    const centerAtStart = Math.round((startIdx + endIdx) / 2);
-    const halfAtStart = Math.round((endIdx - startIdx) / 2);
-    let dragged = false;
-    const handlers = {};
-    const cleanup = () => {
-      document.removeEventListener('touchmove', handlers.move);
-      document.removeEventListener('touchend', handlers.up);
-    };
-    handlers.move = (ev) => {
-      ev.preventDefault();
-      if (Math.abs(ev.touches[0].clientX - startX) > 4) dragged = true;
-      if (!dragged) return;
-      const delta = Math.round(((ev.touches[0].clientX - startX) / rect.width) * sliderMax);
-      const newHalf = Math.max(1, side === 'start' ? halfAtStart - delta : halfAtStart + delta);
-      setStartIdx(Math.max(0, centerAtStart - newHalf));
-      setEndIdx(Math.min(sliderMax, centerAtStart + newHalf));
-    };
-    handlers.up = () => {
-      if (!dragged) {
-        if (side === 'start') handleStartLockToggle();
-        else handleEndLockToggle();
-      }
-      cleanup();
-    };
-    document.addEventListener('touchmove', handlers.move, { passive: false });
-    document.addEventListener('touchend', handlers.up);
-  };
-
   function applyPreset(n) {
-    const currentCenter = Math.round((startIdx + endIdx) / 2);
-    const half = Math.floor(n / 2);
-    const ns = Math.max(0, currentCenter - half);
-    const ne = Math.min(sliderMax, ns + n - 1);
+    const ns = Math.max(0, endIdx - n + 1);
     setStartIdx(ns);
-    setEndIdx(ne);
   }
 
   // Collapsible sections
@@ -598,19 +545,25 @@ export default function Dashboard({ data, onReset }) {
     () => extendedDays.slice(startIdx, endIdx + 1),
     [extendedDays, startIdx, endIdx]
   );
+  const todayIdx = days.length - 1;
   const windowSize = endIdx - startIdx + 1;
-  const centerIdx = Math.round((startIdx + endIdx) / 2);
 
-  // Keep windowSizeRef in sync for the PhysicsTimeline callback closure
-  useEffect(() => { windowSizeRef.current = windowSize; }, [windowSize]);
+  const schengenPressure = useMemo(() => {
+    const pressure = new Float32Array(extendedDays.length);
+    let count = 0;
+    const ring = [];
+    for (let i = 0; i < extendedDays.length; i++) {
+      const sch = extendedDays[i].countries.some(c => SCHENGEN_COUNTRIES.has(c)) ? 1 : 0;
+      ring.push(sch);
+      count += sch;
+      if (ring.length > 180) count -= ring.shift();
+      pressure[i] = Math.min(1, count / 90);
+    }
+    return pressure;
+  }, [extendedDays]);
 
-  const handleCenterChange = useCallback((newCenter) => {
-    const ws = windowSizeRef.current;
-    const half = Math.floor(ws / 2);
-    const ns = Math.max(0, Math.min(newCenter - half, sliderMax - ws + 1));
-    setStartIdx(ns);
-    setEndIdx(ns + ws - 1);
-  }, [sliderMax]);
+  const handleStartChange = useCallback((newIdx) => { setStartIdx(newIdx); }, []);
+  const handleEndChange   = useCallback((newIdx) => { setEndIdx(newIdx); }, []);
 
   const tabDays = useMemo(() => {
     if (tab === 'schengen') {
@@ -868,11 +821,13 @@ export default function Dashboard({ data, onReset }) {
             </div>
             {/* Physics spinnable timeline */}
             <PhysicsTimeline
-              centerIdx={centerIdx}
-              windowSize={windowSize}
+              startIdx={startIdx}
+              endIdx={endIdx}
               extendedDays={extendedDays}
               sliderMax={sliderMax}
-              onCenterChange={handleCenterChange}
+              onStartChange={handleStartChange}
+              onEndChange={handleEndChange}
+              schengenPressure={schengenPressure}
             />
             <div className="range-hint">spin to scroll · presets change range width</div>
           </div>
