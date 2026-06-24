@@ -40,6 +40,22 @@ const DOW = ['Mo','Tu','We','Th','Fr','Sa','Su'];
 
 const DEFAULT_OPEN = { dateRange: true, countries: true, calendar: true };
 
+function addDaysToStr(dateStr, n) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const obj = new Date(Date.UTC(y, m - 1, d));
+  obj.setUTCDate(obj.getUTCDate() + n);
+  return `${obj.getUTCFullYear()}-${String(obj.getUTCMonth() + 1).padStart(2, '0')}-${String(obj.getUTCDate()).padStart(2, '0')}`;
+}
+
+function daysBetweenStr(a, b) {
+  if (!a || !b) return 0;
+  const pa = a.split('-').map(Number);
+  const pb = b.split('-').map(Number);
+  const da = new Date(Date.UTC(pa[0], pa[1] - 1, pa[2]));
+  const db = new Date(Date.UTC(pb[0], pb[1] - 1, pb[2]));
+  return Math.max(0, Math.round((db - da) / 86400000));
+}
+
 function formatDate(dateStr) {
   if (!dateStr) return '';
   const [y, m, d] = dateStr.split('-').map(Number);
@@ -180,6 +196,47 @@ export default function Dashboard({ data, onReset }) {
   const defaultStart = Math.max(0, days.length - 180);
   const [startIdx, setStartIdx] = useState(defaultStart);
   const [endIdx, setEndIdx] = useState(days.length - 1);
+  const [rangeMode, setRangeMode] = useState('free'); // 'free' | 'fixed'
+  const [fixedDays, setFixedDays] = useState(180);
+
+  // Extend the days array 366 days into the future with empty entries so the
+  // slider can project forward past the last recorded travel date.
+  const todayIdx = days.length - 1;
+  const extendedDays = useMemo(() => {
+    if (!days.length) return days;
+    const lastDate = days[days.length - 1].date;
+    const future = [];
+    for (let i = 1; i <= 366; i++) {
+      future.push({ date: addDaysToStr(lastDate, i), countries: [] });
+    }
+    return [...days, ...future];
+  }, [days]);
+
+  const sliderMax = extendedDays.length - 1;
+  const pctOf = idx => `${(idx / sliderMax) * 100}%`;
+
+  const activeEndIdx = rangeMode === 'fixed'
+    ? Math.min(sliderMax, startIdx + fixedDays - 1)
+    : endIdx;
+
+  const handleStartChange = e => {
+    const v = Number(e.target.value);
+    if (rangeMode === 'fixed') {
+      setStartIdx(v);
+    } else {
+      setStartIdx(Math.min(v, endIdx - 29));
+    }
+  };
+  const handleEndChange = e => setEndIdx(Math.max(Number(e.target.value), startIdx + 29));
+
+  function activateFixed(n) {
+    setRangeMode('fixed');
+    setFixedDays(n);
+    setStartIdx(Math.max(0, todayIdx - n + 1));
+  }
+  function activateFree() {
+    setRangeMode('free');
+  }
 
   // Collapsible sections
   const [sectionOpen, setSectionOpen] = useState({ ...DEFAULT_OPEN });
@@ -208,10 +265,10 @@ export default function Dashboard({ data, onReset }) {
   }
 
   const visibleDays = useMemo(
-    () => days.slice(startIdx, endIdx + 1),
-    [days, startIdx, endIdx]
+    () => extendedDays.slice(startIdx, activeEndIdx + 1),
+    [extendedDays, startIdx, activeEndIdx]
   );
-  const windowSize = endIdx - startIdx + 1;
+  const windowSize = activeEndIdx - startIdx + 1;
 
   const tabDays = useMemo(() => {
     if (tab === 'schengen') {
@@ -290,44 +347,23 @@ export default function Dashboard({ data, onReset }) {
     return result;
   }, [visibleDays, dayColorMap]);
 
-  const sliderMax = days.length - 1;
-  const pctOf = idx => `${(idx / sliderMax) * 100}%`;
-  const handleStartChange = e => setStartIdx(Math.min(Number(e.target.value), endIdx - 29));
-  const handleEndChange = e => setEndIdx(Math.max(Number(e.target.value), startIdx + 29));
-
   const totalWorldDays = useMemo(
     () => visibleDays.filter(d => d.countries.length > 0).length,
     [visibleDays]
   );
 
-  const addDaysToStr = (dateStr, n) => {
-    const [y, m, d] = dateStr.split('-').map(Number);
-    const obj = new Date(Date.UTC(y, m - 1, d));
-    obj.setUTCDate(obj.getUTCDate() + n);
-    return `${obj.getUTCFullYear()}-${String(obj.getUTCMonth() + 1).padStart(2, '0')}-${String(obj.getUTCDate()).padStart(2, '0')}`;
-  };
-
-  const daysBetweenStr = (a, b) => {
-    if (!a || !b) return 0;
-    const pa = a.split('-').map(Number);
-    const pb = b.split('-').map(Number);
-    const da = new Date(Date.UTC(pa[0], pa[1] - 1, pa[2]));
-    const db = new Date(Date.UTC(pb[0], pb[1] - 1, pb[2]));
-    return Math.max(0, Math.round((db - da) / 86400000));
-  };
-
   const realTodayStr = days[days.length - 1]?.date;
-  const evalDateStr = days[endIdx]?.date;
+  const evalDateStr = extendedDays[activeEndIdx]?.date;
   const isHistorical = evalDateStr && realTodayStr && evalDateStr !== realTodayStr;
 
   const feieStats = useMemo(() => {
-    const periodWindow = days.slice(startIdx, endIdx + 1);
+    const periodWindow = extendedDays.slice(startIdx, activeEndIdx + 1);
     const windowLen = periodWindow.length;
     const outsideDates = periodWindow.filter(d => !d.countries.includes('US')).map(d => d.date);
     const usaCount = windowLen - outsideDates.length;
     const nonUsaCount = outsideDates.length;
     const qualifies = nonUsaCount >= 330;
-    const startDateStr = days[startIdx]?.date;
+    const startDateStr = extendedDays[startIdx]?.date;
 
     let qualifyingDate = null;
     let daysUntilQualifying = 0;
@@ -347,11 +383,11 @@ export default function Dashboard({ data, onReset }) {
       qualifyingDate, daysUntilQualifying,
       windowLen, startDateStr,
     };
-  }, [days, startIdx, endIdx, evalDateStr]);
+  }, [extendedDays, startIdx, activeEndIdx, evalDateStr]);
 
   const schengenProjection = useMemo(() => {
-    const startEval = Math.max(0, endIdx - 179);
-    const sWindow = days.slice(startEval, endIdx + 1);
+    const startEval = Math.max(0, activeEndIdx - 179);
+    const sWindow = extendedDays.slice(startEval, activeEndIdx + 1);
     const schengenDates = sWindow
       .filter(d => d.countries.some(c => SCHENGEN_COUNTRIES.has(c)))
       .map(d => d.date);
@@ -370,7 +406,7 @@ export default function Dashboard({ data, onReset }) {
       earliestReentryDays = daysBetweenStr(evalDateStr, earliestReentryDate);
     }
     return { count, fullResetDate, fullResetDays, earliestReentryDate, earliestReentryDays };
-  }, [days, endIdx, evalDateStr]);
+  }, [extendedDays, activeEndIdx, evalDateStr]);
 
   if (showPrint) return <PrintReport data={data} onClose={() => setShowPrint(false)} />;
 
@@ -469,15 +505,37 @@ export default function Dashboard({ data, onReset }) {
         <SectionHeader title="Date Range" open={sectionOpen.dateRange} onToggle={() => toggleSection('dateRange')} />
         {sectionOpen.dateRange && (
           <div className="date-range-wrap">
+            <div className="range-mode-row">
+              {[30, 60, 90, 180, 365].map(n => (
+                <button
+                  key={n}
+                  className={`range-preset-btn${rangeMode === 'fixed' && fixedDays === n ? ' active' : ''}`}
+                  onClick={() => activateFixed(n)}
+                >
+                  {n}d
+                </button>
+              ))}
+              <button
+                className={`range-preset-btn${rangeMode === 'free' ? ' active' : ''}`}
+                onClick={activateFree}
+              >
+                Free
+              </button>
+            </div>
             <div className="date-range-labels">
-              <span>{formatDate(days[startIdx]?.date)}</span>
-              <span>{formatDate(days[endIdx]?.date)}</span>
+              <span>{formatDate(extendedDays[startIdx]?.date)}</span>
+              <span>
+                {formatDate(extendedDays[activeEndIdx]?.date)}
+                {rangeMode === 'fixed' && <span className="range-window-size"> ({fixedDays}d)</span>}
+              </span>
             </div>
             <div className="dual-slider">
               <div className="dual-slider-track" />
-              <div className="dual-slider-fill" style={{ left: pctOf(startIdx), right: `${100 - (endIdx / sliderMax) * 100}%` }} />
+              <div className="dual-slider-fill" style={{ left: pctOf(startIdx), right: `${100 - (activeEndIdx / sliderMax) * 100}%` }} />
               <input type="range" min={0} max={sliderMax} value={startIdx} onChange={handleStartChange} className="slider-thumb" />
-              <input type="range" min={0} max={sliderMax} value={endIdx} onChange={handleEndChange} className="slider-thumb" />
+              {rangeMode === 'free' && (
+                <input type="range" min={0} max={sliderMax} value={endIdx} onChange={handleEndChange} className="slider-thumb" />
+              )}
             </div>
           </div>
         )}

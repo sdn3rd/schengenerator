@@ -152,6 +152,43 @@
 }
 
 /* Date range slider */
+.range-mode-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.range-preset-btn {
+  padding: 4px 10px;
+  border-radius: 12px;
+  border: 1.5px solid var(--surface2);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  line-height: 1.4;
+}
+
+.range-preset-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.range-preset-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.range-window-size {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+  margin-left: 2px;
+}
+
 .date-range-wrap {
   padding: 18px 22px;
   display: flex;
