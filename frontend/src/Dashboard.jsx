@@ -78,36 +78,51 @@ function formatDate(dateStr) {
 function PhysicsTimeline({ startIdx, endIdx, extendedDays, sliderMax, onStartChange, onEndChange, schengenPressure }) {
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
-  const physRef = useRef({
-    pos: (startIdx + endIdx) / 2,
-    vel: 0,
-    dragTarget: null,
-    startX: 0,
-    startPos: 0,
-    startBarIdx: 0,
-    endBarIdx: 0,
-    lastX: 0,
-    lastT: 0,
-    dragVel: 0,
-  });
-  // lock state lives only in a ref — RAF reads it directly each frame
-  const lockRef = useRef({ start: false, end: true });
-  const idxRef = useRef({ startIdx, endIdx });
-  const cbRef = useRef({ onStartChange, onEndChange });
-  const pressureRef = useRef(schengenPressure);
-  const colRef = useRef({ ar: 79, ag: 140, ab: 255 });
 
-  useEffect(() => { idxRef.current = { startIdx, endIdx }; }, [startIdx, endIdx]);
+  // Bars are day-offsets from the view center (pos).
+  // Spinning changes pos but NOT lbOff/rbOff → bars stay on screen always.
+  const phRef = useRef(null);
+  if (phRef.current === null) {
+    const center = (startIdx + endIdx) / 2;
+    phRef.current = {
+      pos: center,               // date index at canvas center (float)
+      posVel: 0,
+      lbOff: startIdx - center,  // left bar offset from pos in days (≤ 0)
+      rbOff: endIdx   - center,  // right bar offset from pos in days (≥ 0)
+      lbVel: 0,
+      rbVel: 0,
+      dragTarget: null,          // 'spin' | 'left' | 'right'
+      dragStartX: 0,
+      dragStartPos: 0,
+      dragStartLb: 0,
+      dragStartRb: 0,
+      lastX: 0,
+      lastT: 0,
+      lastVelPx: 0,
+      lastStart: startIdx,
+      lastEnd:   endIdx,
+    };
+  }
+
+  const lockRef    = useRef({ left: false, right: true });
+  const cbRef      = useRef({ onStartChange, onEndChange });
+  const pressureRef = useRef(schengenPressure);
+  const colRef     = useRef({ ar: 79, ag: 140, ab: 255 });
+
   useEffect(() => { cbRef.current = { onStartChange, onEndChange }; }, [onStartChange, onEndChange]);
   useEffect(() => { pressureRef.current = schengenPressure; }, [schengenPressure]);
 
-  // Snap view to new center when bars jump far (preset applied)
+  // Sync when preset fires a large jump from outside
   useEffect(() => {
-    const center = (startIdx + endIdx) / 2;
-    const ph = physRef.current;
-    if (Math.abs(ph.pos - center) > 50) {
-      ph.pos = center;
-      ph.vel = 0;
+    const ph = phRef.current;
+    const curStart = Math.round(ph.pos + ph.lbOff);
+    const curEnd   = Math.round(ph.pos + ph.rbOff);
+    if (Math.abs(curStart - startIdx) > 3 || Math.abs(curEnd - endIdx) > 3) {
+      const center  = (startIdx + endIdx) / 2;
+      ph.pos    = center;
+      ph.lbOff  = startIdx - center;
+      ph.rbOff  = endIdx   - center;
+      ph.posVel = ph.lbVel = ph.rbVel = 0;
     }
   }, [startIdx, endIdx]);
 
@@ -127,9 +142,9 @@ function PhysicsTimeline({ startIdx, endIdx, extendedDays, sliderMax, onStartCha
     function resize() {
       const dpr = window.devicePixelRatio || 1;
       const w = wrap.getBoundingClientRect().width;
-      canvas.width = Math.round(w * dpr);
+      canvas.width  = Math.round(w * dpr);
       canvas.height = Math.round(H_CSS * dpr);
-      canvas.style.width = `${w}px`;
+      canvas.style.width  = `${w}px`;
       canvas.style.height = `${H_CSS}px`;
     }
     resize();
@@ -143,67 +158,98 @@ function PhysicsTimeline({ startIdx, endIdx, extendedDays, sliderMax, onStartCha
     let rafId;
     let lastTime = performance.now();
     const PX_PER_DAY = 10;
+    const MIN_GAP_DAYS = 1;
 
     const colorStops = [
-      { r: 38,  g: 122, b: 66  }, // green  — 0 days used
-      { r: 180, g: 111, b: 9   }, // amber  — 60 days used
-      { r: 196, g: 35,  b: 68  }, // red    — 90 days used
+      { r: 38,  g: 122, b: 66 },
+      { r: 180, g: 111, b: 9  },
+      { r: 196, g: 35,  b: 68 },
     ];
-
     function lerpCol(t) {
       const n = colorStops.length - 1;
       const seg = t * n;
       const i = Math.min(Math.floor(seg), n - 1);
       const f = seg - i;
       const a = colorStops[i], b = colorStops[i + 1];
-      return [
-        Math.round(a.r + (b.r - a.r) * f),
-        Math.round(a.g + (b.g - a.g) * f),
-        Math.round(a.b + (b.b - a.b) * f),
-      ];
+      return [Math.round(a.r+(b.r-a.r)*f), Math.round(a.g+(b.g-a.g)*f), Math.round(a.b+(b.b-a.b)*f)];
     }
 
     function loop(now) {
       const dt = Math.min((now - lastTime) / 1000, 0.05);
       lastTime = now;
-      const ph = physRef.current;
-      const lk = lockRef.current;
-      const idx = idxRef.current;
+      const ph  = phRef.current;
+      const lk  = lockRef.current;
       const dpr = window.devicePixelRatio || 1;
       const { ar, ag, ab } = colRef.current;
 
-      // Physics spring — only when not dragging
-      if (!ph.dragTarget) {
-        ph.vel *= Math.exp(-6 * dt);
-        ph.vel += (Math.round(ph.pos) - ph.pos) * 160 * dt;
-        ph.pos += ph.vel * dt;
-        ph.pos = Math.max(0, Math.min(sliderMax, ph.pos));
+      // Spin physics
+      if (ph.dragTarget !== 'spin') {
+        ph.posVel *= Math.exp(-6 * dt);
+        ph.posVel += (Math.round(ph.pos) - ph.pos) * 160 * dt;
+        ph.pos += ph.posVel * dt;
       }
 
+      // Bar spring physics — snap each to nearest integer day offset
+      if (ph.dragTarget !== 'left') {
+        ph.lbVel *= Math.exp(-7 * dt);
+        ph.lbVel += (Math.round(ph.lbOff) - ph.lbOff) * 220 * dt;
+        ph.lbOff += ph.lbVel * dt;
+      }
+      if (ph.dragTarget !== 'right') {
+        ph.rbVel *= Math.exp(-7 * dt);
+        ph.rbVel += (Math.round(ph.rbOff) - ph.rbOff) * 220 * dt;
+        ph.rbOff += ph.rbVel * dt;
+      }
+
+      // Elastic bounce when bars collide
+      if (ph.rbOff - ph.lbOff < MIN_GAP_DAYS) {
+        const mid = (ph.lbOff + ph.rbOff) / 2;
+        ph.lbOff = mid - MIN_GAP_DAYS / 2;
+        ph.rbOff = mid + MIN_GAP_DAYS / 2;
+        // Equal-mass elastic collision (e=0.85)
+        const vl = ph.lbVel, vr = ph.rbVel;
+        ph.lbVel = vl * 0.075 + vr * 0.925;
+        ph.rbVel = vr * 0.075 + vl * 0.925;
+        // Additional push-apart impulse so they don't stick
+        ph.lbVel -= 2; ph.rbVel += 2;
+      }
+
+      // Clamp pos so startIdx ≥ 0 and endIdx ≤ sliderMax
+      ph.pos = Math.max(-ph.lbOff, Math.min(sliderMax - ph.rbOff, ph.pos));
+
+      // Notify parent when rounded values change
+      const ns = Math.round(ph.pos + ph.lbOff);
+      const ne = Math.round(ph.pos + ph.rbOff);
+      if ((ns !== ph.lastStart || ne !== ph.lastEnd) && ns < ne && ns >= 0 && ne <= sliderMax) {
+        ph.lastStart = ns; ph.lastEnd = ne;
+        cbRef.current.onStartChange(ns);
+        cbRef.current.onEndChange(ne);
+      }
+
+      // ── Draw ──
       const ctx = canvas.getContext('2d');
-      const W = canvas.width;
-      const H = canvas.height;
+      const W = canvas.width, H = canvas.height;
       ctx.clearRect(0, 0, W, H);
 
       const centerX = W / 2;
       const baseline = H * 0.55;
       const pxDay = PX_PER_DAY * dpr;
 
-      const startBarX = centerX + (idx.startIdx - ph.pos) * pxDay;
-      const endBarX   = centerX + (idx.endIdx   - ph.pos) * pxDay;
+      const lbX = centerX + ph.lbOff * pxDay;
+      const rbX = centerX + ph.rbOff * pxDay;
 
-      // Faint baseline rule
+      // Faint baseline
       ctx.strokeStyle = `rgba(${ar},${ag},${ab},0.1)`;
       ctx.lineWidth = dpr;
       ctx.beginPath(); ctx.moveTo(0, baseline); ctx.lineTo(W, baseline); ctx.stroke();
 
-      // Window band between the two bars
-      if (startBarX < endBarX) {
+      // Window band
+      if (lbX < rbX) {
         ctx.fillStyle = `rgba(${ar},${ag},${ab},0.07)`;
-        ctx.fillRect(startBarX, 0, endBarX - startBarX, baseline);
+        ctx.fillRect(lbX, 0, rbX - lbX, baseline);
       }
 
-      // Ticks — magnetic stretch toward center, colorized by Schengen pressure
+      // Ticks — magnetic stretch near EITHER bar, colorized by Schengen pressure
       const pressure = pressureRef.current;
       const visRange = Math.ceil(W / pxDay) + 4;
       const d0 = Math.floor(ph.pos - visRange / 2);
@@ -211,21 +257,22 @@ function PhysicsTimeline({ startIdx, endIdx, extendedDays, sliderMax, onStartCha
 
       for (let day = d0; day <= d1; day++) {
         if (day < 0 || day >= extendedDays.length) continue;
-        const x = centerX + (day - ph.pos) * pxDay;
+        const x  = centerX + (day - ph.pos) * pxDay;
         const ds = extendedDays[day].date;
-        const m = parseInt(ds.slice(5, 7));
-        const d = parseInt(ds.slice(8, 10));
+        const mo = parseInt(ds.slice(5, 7));
+        const d  = parseInt(ds.slice(8, 10));
         const isMonth = d === 1;
-        const isYear  = isMonth && m === 1;
+        const isYear  = isMonth && mo === 1;
         const isWeek  = d % 7 === 1;
 
-        const distFromCenter = Math.abs(x - centerX);
-        const t = Math.max(0, 1 - distFromCenter / (W * 0.3));
+        // Proximity to the nearest bar
+        const minDist = Math.min(Math.abs(x - lbX), Math.abs(x - rbX));
+        const t   = Math.max(0, 1 - minDist / (W * 0.22));
         const mag = t * t * t;
 
         const baseH = isYear ? 32 : isMonth ? 18 : isWeek ? 7 : 3;
-        const tickH = (baseH + mag * 62) * dpr;
-        const alpha = isMonth ? 0.25 + mag * 0.75 : 0.08 + mag * 0.5;
+        const tickH = (baseH + mag * 65) * dpr;
+        const alpha = isMonth ? 0.22 + mag * 0.78 : 0.07 + mag * 0.55;
 
         let tr = ar, tg = ag, tb = ab;
         if (pressure && day < pressure.length && pressure[day] > 0.05) {
@@ -247,12 +294,12 @@ function PhysicsTimeline({ startIdx, endIdx, extendedDays, sliderMax, onStartCha
             ctx.font = `${isYear ? '700' : '500'} ${(isYear ? 12 : 10) * dpr}px system-ui,sans-serif`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'top';
-            ctx.fillText(isYear ? ds.slice(0,4) : MONTH_ABBR[m-1], x, baseline + 5*dpr);
+            ctx.fillText(isYear ? ds.slice(0,4) : MONTH_ABBR[mo-1], x, baseline + 5*dpr);
           }
         }
       }
 
-      // Draw a vertical bar with lock/free label
+      // Draw vertical bar + LOCK/FREE label
       function drawBar(bx, isLocked) {
         const br = isLocked ? 255 : ar;
         const bg = isLocked ? 180 : ag;
@@ -269,8 +316,8 @@ function PhysicsTimeline({ startIdx, endIdx, extendedDays, sliderMax, onStartCha
         ctx.fillText(isLocked ? 'LOCK' : 'FREE', bx, baseline + 10 * dpr);
       }
 
-      drawBar(startBarX, lk.start);
-      drawBar(endBarX,   lk.end);
+      drawBar(lbX, lk.left);
+      drawBar(rbX, lk.right);
 
       rafId = requestAnimationFrame(loop);
     }
@@ -283,67 +330,69 @@ function PhysicsTimeline({ startIdx, endIdx, extendedDays, sliderMax, onStartCha
     e.preventDefault();
     const canvas = canvasRef.current;
     const dpr = window.devicePixelRatio || 1;
-    const ph = physRef.current;
-    const lk = lockRef.current;
-    const idx = idxRef.current;
+    const ph  = phRef.current;
+    const lk  = lockRef.current;
     const PX_PER_DAY = 10;
 
-    const rect = canvas.getBoundingClientRect();
+    const rect  = canvas.getBoundingClientRect();
     const clickX = (e.clientX - rect.left) * dpr;
-    const W = canvas.width;
-    const centerX = W / 2;
+    const W     = canvas.width;
     const pxDay = PX_PER_DAY * dpr;
+    const lbX   = W / 2 + ph.lbOff * pxDay;
+    const rbX   = W / 2 + ph.rbOff * pxDay;
 
-    const startBarX = centerX + (idx.startIdx - ph.pos) * pxDay;
-    const endBarX   = centerX + (idx.endIdx   - ph.pos) * pxDay;
-    const dStart = Math.abs(clickX - startBarX);
-    const dEnd   = Math.abs(clickX - endBarX);
+    const dL = Math.abs(clickX - lbX);
+    const dR = Math.abs(clickX - rbX);
     const HIT = 22 * dpr;
 
-    let target = 'view';
-    if (dStart < HIT && dStart <= dEnd) target = 'start';
-    else if (dEnd < HIT) target = 'end';
+    let target = 'spin';
+    if (dL < HIT && dL <= dR) target = 'left';
+    else if (dR < HIT)         target = 'right';
 
-    ph.dragTarget   = target;
-    ph.startX       = e.clientX;
-    ph.startPos     = ph.pos;
-    ph.startBarIdx  = idx.startIdx;
-    ph.endBarIdx    = idx.endIdx;
-    ph.lastX        = e.clientX;
-    ph.lastT        = performance.now();
-    ph.dragVel      = 0;
-    if (target === 'view') ph.vel = 0;
+    ph.dragTarget  = target;
+    ph.dragStartX  = e.clientX;
+    ph.dragStartPos = ph.pos;
+    ph.dragStartLb = ph.lbOff;
+    ph.dragStartRb = ph.rbOff;
+    ph.lastX = e.clientX;
+    ph.lastT = performance.now();
+    ph.lastVelPx = 0;
+    if (target === 'spin')  ph.posVel = 0;
+    if (target === 'left')  ph.lbVel  = 0;
+    if (target === 'right') ph.rbVel  = 0;
 
     let dragged = false;
 
     const onMove = (ev) => {
-      if (Math.abs(ev.clientX - ph.startX) > 4) dragged = true;
+      if (Math.abs(ev.clientX - ph.dragStartX) > 4) dragged = true;
       if (!dragged) return;
-      const x = ev.clientX;
+      const x   = ev.clientX;
       const now = performance.now();
       const moveDt = Math.max(0.001, (now - ph.lastT) / 1000);
+      ph.lastVelPx = (x - ph.lastX) / moveDt; // px/s, positive = right
+      const dx = x - ph.dragStartX;
 
-      if (target === 'view') {
-        ph.dragVel = -(x - ph.lastX) / PX_PER_DAY / moveDt;
-        ph.pos = Math.max(0, Math.min(sliderMax, ph.startPos - (x - ph.startX) / PX_PER_DAY));
-      } else if (target === 'start' && !lk.start) {
-        const ni = Math.round(ph.startBarIdx + (x - ph.startX) / PX_PER_DAY);
-        cbRef.current.onStartChange(Math.max(0, Math.min(idx.endIdx - 1, ni)));
-      } else if (target === 'end' && !lk.end) {
-        const ni = Math.round(ph.endBarIdx + (x - ph.startX) / PX_PER_DAY);
-        cbRef.current.onEndChange(Math.max(idx.startIdx + 1, Math.min(sliderMax, ni)));
+      if (target === 'spin') {
+        ph.pos = ph.dragStartPos - dx / PX_PER_DAY;
+      } else if (target === 'left' && !lk.left) {
+        ph.lbOff = Math.min(ph.dragStartLb + dx / PX_PER_DAY, ph.rbOff - 1);
+      } else if (target === 'right' && !lk.right) {
+        ph.rbOff = Math.max(ph.dragStartRb + dx / PX_PER_DAY, ph.lbOff + 1);
       }
 
-      ph.lastX = x;
-      ph.lastT = now;
+      ph.lastX = x; ph.lastT = now;
     };
 
     const onUp = () => {
       if (!dragged) {
-        if (target === 'start') lockRef.current = { ...lockRef.current, start: !lockRef.current.start };
-        else if (target === 'end') lockRef.current = { ...lockRef.current, end: !lockRef.current.end };
+        if (target === 'left')  lockRef.current = { ...lockRef.current, left:  !lockRef.current.left  };
+        if (target === 'right') lockRef.current = { ...lockRef.current, right: !lockRef.current.right };
+      } else {
+        const velDays = ph.lastVelPx / PX_PER_DAY;
+        if (target === 'spin')  ph.posVel = -velDays * 0.6;
+        if (target === 'left'  && !lk.left)  ph.lbVel = velDays * 0.35;
+        if (target === 'right' && !lk.right) ph.rbVel = velDays * 0.35;
       }
-      if (target === 'view') ph.vel = ph.dragVel * 0.6;
       ph.dragTarget = null;
       document.removeEventListener('pointermove', onMove);
       document.removeEventListener('pointerup', onUp);
