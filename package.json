@@ -1,6 +1,6 @@
 {
   "name": "schengenerator",
-  "version": "1.6.3",
+  "version": "1.6.4",
   "private": true,
   "scripts": {
     "dev:backend": "npm --prefix backend run dev",

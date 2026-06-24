@@ -225,16 +225,18 @@ export default function Dashboard({ data, onReset }) {
     setEndIdx(Math.max(Number(e.target.value), startIdx + 1));
   };
 
-  function handleStartDoubleClick() {
+  function handleStartLockToggle() {
     setLockedThumb(prev => {
-      if (prev === 'both' || prev === 'start') return null;
+      if (prev === 'start') return null;
+      if (prev === 'both') return 'end';
       if (prev === 'end') return 'both';
       return 'start';
     });
   }
-  function handleEndDoubleClick() {
+  function handleEndLockToggle() {
     setLockedThumb(prev => {
-      if (prev === 'both' || prev === 'end') return null;
+      if (prev === 'end') return null;
+      if (prev === 'both') return 'start';
       if (prev === 'start') return 'both';
       return 'end';
     });
@@ -567,12 +569,20 @@ export default function Dashboard({ data, onReset }) {
             </div>
             <div className="date-range-labels">
               <span className={`date-thumb-label${lockedThumb === 'start' || lockedThumb === 'both' ? ' is-locked' : ''}`}>
-                {(lockedThumb === 'start' || lockedThumb === 'both') && <span className="thumb-lock-pip" />}
+                <button
+                  className={`lock-toggle${lockedThumb === 'start' || lockedThumb === 'both' ? ' locked' : ''}`}
+                  onClick={handleStartLockToggle}
+                  title={lockedThumb === 'start' || lockedThumb === 'both' ? 'Unlock start' : 'Lock start'}
+                />
                 {formatDate(extendedDays[startIdx]?.date)}
               </span>
               <span className={`date-thumb-label${lockedThumb === 'end' || lockedThumb === 'both' ? ' is-locked' : ''}`}>
                 {formatDate(extendedDays[endIdx]?.date)}
-                {(lockedThumb === 'end' || lockedThumb === 'both') && <span className="thumb-lock-pip" />}
+                <button
+                  className={`lock-toggle${lockedThumb === 'end' || lockedThumb === 'both' ? ' locked' : ''}`}
+                  onClick={handleEndLockToggle}
+                  title={lockedThumb === 'end' || lockedThumb === 'both' ? 'Unlock end' : 'Lock end'}
+                />
               </span>
             </div>
             <div className="dual-slider" ref={sliderRef}>
@@ -580,12 +590,12 @@ export default function Dashboard({ data, onReset }) {
               <div className="dual-slider-fill" style={{ left: pctOf(startIdx), right: `${100 - (endIdx / sliderMax) * 100}%` }} />
               <input
                 type="range" min={0} max={sliderMax} value={startIdx}
-                onChange={handleStartChange} onDoubleClick={handleStartDoubleClick}
+                onChange={handleStartChange}
                 className={`slider-thumb${lockedThumb === 'start' || lockedThumb === 'both' ? ' thumb-locked' : ''}`}
               />
               <input
                 type="range" min={0} max={sliderMax} value={endIdx}
-                onChange={handleEndChange} onDoubleClick={handleEndDoubleClick}
+                onChange={handleEndChange}
                 className={`slider-thumb${lockedThumb === 'end' || lockedThumb === 'both' ? ' thumb-locked' : ''}`}
               />
               {lockedThumb === 'both' && (
@@ -598,8 +608,8 @@ export default function Dashboard({ data, onReset }) {
             </div>
             <div className="range-hint">
               {lockedThumb === 'both'
-                ? 'drag the bar to slide · double-click a thumb to unlock'
-                : 'double-click a thumb to lock that side'}
+                ? 'drag the bar to slide · tap ○ to unlock a side'
+                : 'tap ○ to lock a side · lock both to drag the bar'}
             </div>
           </div>
         )}

@@ -177,7 +177,7 @@
 .date-thumb-label {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   transition: color 0.15s;
 }
 
@@ -185,13 +185,26 @@
   color: var(--accent);
 }
 
-.thumb-lock-pip {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
+.lock-toggle {
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  background: var(--accent);
+  border: 1.5px solid var(--surface2);
+  background: var(--surface);
+  cursor: pointer;
   flex-shrink: 0;
+  padding: 0;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+.lock-toggle:hover {
+  border-color: var(--accent);
+}
+
+.lock-toggle.locked {
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
 }
 
 .range-hint {
