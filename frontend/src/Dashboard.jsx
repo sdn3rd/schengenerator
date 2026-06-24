@@ -502,8 +502,11 @@ function SchengenCard({ total, projection, asOf, isHistorical }) {
 
 function FeieCard({ stats, asOf, isHistorical }) {
   const { usaCount, nonUsaCount, qualifies, qualifyingDate, daysUntilQualifying, windowLen, startDateStr } = stats;
-  const pct = Math.min((nonUsaCount / 330) * 100, 100);
-  const color = qualifies ? '#267a42' : pct >= 75 ? '#b46f09' : '#4f8cff';
+  // Color based on USA days used — limit is 35 (365-330). Red zone starts at 30.
+  const USA_LIMIT = 35;
+  const pct = Math.min((usaCount / USA_LIMIT) * 100, 100);
+  const color = usaCount > 30 ? '#c42344' : usaCount > 20 ? '#cc5214' : '#267a42';
+  const remaining = USA_LIMIT - usaCount;
 
   return (
     <div className="result-card" style={{ '--rc-accent': color }}>
@@ -512,19 +515,28 @@ function FeieCard({ stats, asOf, isHistorical }) {
       </div>
       <div className="rc-row">
         <div className="rc-main">
-          <span className="rc-num">{nonUsaCount}</span>
-          <span className="rc-denom"> / 330</span>
-          <span className="rc-label"> outside-USA days</span>
+          <span className="rc-num">{usaCount}</span>
+          <span className="rc-denom"> / {USA_LIMIT}</span>
+          <span className="rc-label"> USA days used</span>
         </div>
-        <div className="rc-status">{qualifies ? 'Qualifies ✓' : `${daysUntilQualifying} more needed`}</div>
+        <div className="rc-status">
+          {usaCount > USA_LIMIT
+            ? `${usaCount - USA_LIMIT} over limit`
+            : usaCount > 30
+            ? `${remaining} left — caution`
+            : `${remaining} remaining`}
+        </div>
       </div>
       <div className="rc-proj-row">
-        <div className="rc-proj-label">{qualifies ? 'Hit 330 on' : 'Projected qualification'}{isHistorical ? ` (as of ${formatDate(asOf)})` : ''}</div>
+        <div className="rc-proj-label">
+          {nonUsaCount} outside-USA · {qualifies ? 'Qualifies ✓' : 'Projected'}
+          {isHistorical ? ` (as of ${formatDate(asOf)})` : ''}
+        </div>
         <div className="rc-proj-date">{formatDate(qualifyingDate)}</div>
         {!qualifies && <div className="rc-proj-count">{daysUntilQualifying}d away</div>}
       </div>
       <div className="rc-note">
-        {formatDate(startDateStr)} → {formatDate(asOf)} · {windowLen}d window · {usaCount} in US · FEIE needs 330+ outside-USA days
+        {formatDate(startDateStr)} → {formatDate(asOf)} · {windowLen}d window · FEIE: max {USA_LIMIT} USA days in any 365-day window
       </div>
     </div>
   );
@@ -838,6 +850,7 @@ export default function Dashboard({ data, onReset }) {
             visitedCountries={worldCountries}
             visitedPlaces={visitedPlaces}
             windowDates={windowDates}
+            countryNames={countryNames}
           />
         </>
       )}

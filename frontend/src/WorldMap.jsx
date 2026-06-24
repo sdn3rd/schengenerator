@@ -1,4 +1,5 @@
-import { ComposableMap, Geographies, Geography, Marker } from 'react-simple-maps';
+import { useState, useCallback } from 'react';
+import { ComposableMap, Geographies, Geography, Marker, ZoomableGroup } from 'react-simple-maps';
 
 // ISO 3166-1 numeric → alpha-2 (world-atlas topology uses numeric IDs)
 const N2A2 = {
@@ -27,7 +28,12 @@ const N2A2 = {
 
 const GEO_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json';
 
-export default function WorldMap({ visitedCountries, visitedPlaces, windowDates }) {
+export default function WorldMap({ visitedCountries, visitedPlaces, windowDates, countryNames }) {
+  const [zoom, setZoom] = useState(1);
+  const [center, setCenter] = useState([0, 15]);
+  const [loading, setLoading] = useState(true);
+  const [tooltip, setTooltip] = useState(null); // { x, y, text }
+
   const windowSet = new Set(windowDates);
 
   const markers = visitedPlaces
@@ -38,49 +44,109 @@ export default function WorldMap({ visitedCountries, visitedPlaces, windowDates 
     }))
     .filter(m => m.count > 0);
 
+  const handleZoomIn  = () => setZoom(z => Math.min(z * 1.6, 12));
+  const handleZoomOut = () => setZoom(z => Math.max(z / 1.6, 1));
+  const handleReset   = () => { setZoom(1); setCenter([0, 15]); };
+
+  const onMoveEnd = useCallback(({ coordinates, zoom: z }) => {
+    setCenter(coordinates);
+    setZoom(z);
+  }, []);
+
   return (
     <div className="world-map-wrap">
+      {loading && (
+        <div className="map-loading">
+          <div className="map-loading-spinner" />
+          <span>Loading map…</span>
+        </div>
+      )}
+
       <ComposableMap
         projection="geoNaturalEarth1"
-        projectionConfig={{ scale: 145, center: [0, 15] }}
-        style={{ width: '100%', height: 'auto', display: 'block' }}
+        projectionConfig={{ scale: 145 }}
+        style={{ width: '100%', height: 'auto', display: 'block', opacity: loading ? 0 : 1, transition: 'opacity 0.4s' }}
       >
-        <Geographies geography={GEO_URL}>
-          {({ geographies }) =>
-            geographies.map(geo => {
-              const alpha2 = N2A2[+geo.id];
-              const visited = alpha2 ? visitedCountries.has(alpha2) : false;
-              return (
-                <Geography
-                  key={geo.rsmKey}
-                  geography={geo}
-                  fill={visited ? 'rgba(196,35,68,0.65)' : 'rgba(255,255,255,0.07)'}
-                  stroke="rgba(255,255,255,0.12)"
-                  strokeWidth={0.4}
-                  style={{
-                    default: { outline: 'none' },
-                    hover: {
-                      fill: visited ? 'rgba(196,35,68,0.9)' : 'rgba(255,255,255,0.14)',
-                      outline: 'none',
-                    },
-                    pressed: { outline: 'none' },
-                  }}
+        <ZoomableGroup
+          center={center}
+          zoom={zoom}
+          onMoveEnd={onMoveEnd}
+          minZoom={1}
+          maxZoom={12}
+        >
+          <Geographies
+            geography={GEO_URL}
+            onLoadStart={() => setLoading(true)}
+            onLoadEnd={() => setLoading(false)}
+          >
+            {({ geographies }) =>
+              geographies.map(geo => {
+                const alpha2 = N2A2[+geo.id];
+                const visited = alpha2 ? visitedCountries.has(alpha2) : false;
+                const name = (alpha2 && countryNames?.[alpha2]) ?? geo.properties?.name ?? alpha2 ?? '';
+                return (
+                  <Geography
+                    key={geo.rsmKey}
+                    geography={geo}
+                    fill={visited ? 'rgba(196,35,68,0.6)' : 'rgba(255,255,255,0.06)'}
+                    stroke="rgba(255,255,255,0.14)"
+                    strokeWidth={0.5 / zoom}
+                    style={{
+                      default: { outline: 'none' },
+                      hover: {
+                        fill: visited ? 'rgba(196,35,68,0.88)' : 'rgba(255,255,255,0.15)',
+                        outline: 'none',
+                        cursor: 'pointer',
+                      },
+                      pressed: { outline: 'none' },
+                    }}
+                    onMouseEnter={e => {
+                      if (name) setTooltip({ x: e.clientX, y: e.clientY, text: name });
+                    }}
+                    onMouseLeave={() => setTooltip(null)}
+                  />
+                );
+              })
+            }
+          </Geographies>
+
+          {markers.map(({ lat, lon, count }, i) => {
+            const r = Math.max(2, Math.min(8, Math.sqrt(count) * 1.6)) / zoom;
+            return (
+              <Marker
+                key={i}
+                coordinates={[lon, lat]}
+                onMouseEnter={e => setTooltip({ x: e.clientX, y: e.clientY, text: `${count} day${count === 1 ? '' : 's'}` })}
+                onMouseLeave={() => setTooltip(null)}
+              >
+                <circle
+                  r={r}
+                  fill="rgba(79,140,255,0.8)"
+                  stroke="rgba(140,190,255,0.9)"
+                  strokeWidth={0.6 / zoom}
                 />
-              );
-            })
-          }
-        </Geographies>
-        {markers.map(({ lat, lon, count }, i) => (
-          <Marker key={i} coordinates={[lon, lat]}>
-            <circle
-              r={Math.max(2.5, Math.min(9, Math.sqrt(count) * 1.8))}
-              fill="rgba(79,140,255,0.75)"
-              stroke="rgba(120,170,255,0.9)"
-              strokeWidth={0.8}
-            />
-          </Marker>
-        ))}
+              </Marker>
+            );
+          })}
+        </ZoomableGroup>
       </ComposableMap>
+
+      {/* Zoom controls */}
+      <div className="map-controls">
+        <button className="map-ctrl-btn" onClick={handleZoomIn} title="Zoom in">+</button>
+        <button className="map-ctrl-btn" onClick={handleZoomOut} title="Zoom out">−</button>
+        <button className="map-ctrl-btn map-ctrl-reset" onClick={handleReset} title="Reset view">⊙</button>
+      </div>
+
+      {/* Hover tooltip */}
+      {tooltip && (
+        <div
+          className="map-tooltip"
+          style={{ left: tooltip.x + 12, top: tooltip.y - 28, position: 'fixed' }}
+        >
+          {tooltip.text}
+        </div>
+      )}
     </div>
   );
 }
