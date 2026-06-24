@@ -213,6 +213,21 @@
   cursor: default;
 }
 
+.slider-drag-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  cursor: grab;
+  z-index: 10;
+  border-radius: 2px;
+}
+
+.slider-drag-overlay:active {
+  cursor: grabbing;
+}
+
 .date-range-wrap {
   padding: 18px 22px;
   display: flex;
