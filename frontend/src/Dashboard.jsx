@@ -604,8 +604,11 @@ export default function Dashboard({ data, onReset }) {
       const bestStart = findBestFEIEStart(days);
       setStartIdx(bestStart);
       setEndIdx(Math.min(bestStart + 364, days.length - 1));
+    } else if (tab === 'world') {
+      // Full historical range — all of the user's GPS data
+      setStartIdx(0);
+      setEndIdx(days.length - 1);
     }
-    // world: no auto-snap, user controls freely
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 

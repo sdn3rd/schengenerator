@@ -11,6 +11,8 @@ export default function App() {
   );
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [progressStatus, setProgressStatus] = useState('');
   const [error, setError] = useState(null);
   const [dragging, setDragging] = useState(false);
   const fileRef = useRef();
@@ -20,14 +22,23 @@ export default function App() {
   const analyze = useCallback(async (file) => {
     setError(null);
     setLoading(true);
+    setProgress(0);
+    setProgressStatus('Reading file…');
     try {
       const text = await file.text();
       const worker = new Worker(new URL('./timelineWorker.js', import.meta.url), { type: 'module' });
       worker.onmessage = ({ data }) => {
-        setLoading(false);
-        if (data.ok) setResult(data.result);
-        else setError(data.error);
-        worker.terminate();
+        if (data.ok !== undefined) {
+          setProgress(1);
+          setProgressStatus('Done');
+          setLoading(false);
+          if (data.ok) setResult(data.result);
+          else setError(data.error);
+          worker.terminate();
+        } else if (data.progress !== undefined) {
+          setProgress(data.progress);
+          setProgressStatus(data.status ?? '');
+        }
       };
       worker.onerror = (e) => { setLoading(false); setError(e.message); worker.terminate(); };
       worker.postMessage(text);
@@ -92,8 +103,13 @@ export default function App() {
 
               {loading && (
                 <div className="loading-msg">
-                  <div className="spinner" />
-                  Analyzing your timeline...
+                  <div className="progress-bar-wrap">
+                    <div className="progress-bar-fill" style={{ width: `${Math.round(progress * 100)}%` }} />
+                  </div>
+                  <div className="progress-label">
+                    <span>{progressStatus}</span>
+                    <span>{Math.round(progress * 100)}%</span>
+                  </div>
                 </div>
               )}
               {error && (
