@@ -613,6 +613,15 @@
 }
 .no-data small { font-size: 13px; }
 
+/* World map */
+.world-map-wrap {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  line-height: 0;
+}
+
 @media (max-width: 600px) {
   .dashboard { gap: 16px; }
   .date-range-wrap, .cal-wrap { padding: 14px 14px; }

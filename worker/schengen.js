@@ -75,6 +75,8 @@ export function parseTimelineJson(raw) {
   // Require ≥2 GPS pings per country per day to filter single flyover readings.
   const MIN_PINGS = 2;
   const pingCounts = {};
+  // 0.5° grid (~55km) clusters for city-level place tracking
+  const placeGrid = {};
 
   function recordGpsDay(ts, lat, lon) {
     if (ts < cutoff || isNaN(lat) || isNaN(lon)) return;
@@ -83,6 +85,12 @@ export function parseTimelineJson(raw) {
     const dateStr = toDateStr(ts);
     if (!pingCounts[dateStr]) pingCounts[dateStr] = {};
     pingCounts[dateStr][country] = (pingCounts[dateStr][country] ?? 0) + 1;
+    // Place clustering: 0.5° grid cell, key by grid centre
+    const cellLat = Math.round(lat * 2) / 2;
+    const cellLon = Math.round(lon * 2) / 2;
+    const key = `${cellLat},${cellLon}`;
+    if (!placeGrid[key]) placeGrid[key] = { lat: cellLat, lon: cellLon, datePings: {} };
+    placeGrid[key].datePings[dateStr] = (placeGrid[key].datePings[dateStr] ?? 0) + 1;
   }
 
   function processLocations(locations) {
@@ -141,5 +149,14 @@ export function parseTimelineJson(raw) {
   }
   const totalSchengenDays = recent.filter(d => d.countries.some(c => SCHENGEN_COUNTRIES.has(c))).length;
 
-  return { days, countryTotals, totalSchengenDays };
+  // Build visitedPlaces: only grid cells with ≥2 pings on a given day (>~1 hour)
+  const visitedPlaces = Object.values(placeGrid)
+    .map(({ lat, lon, datePings }) => ({
+      lat,
+      lon,
+      dates: Object.entries(datePings).filter(([, n]) => n >= MIN_PINGS).map(([d]) => d),
+    }))
+    .filter(p => p.dates.length > 0);
+
+  return { days, countryTotals, totalSchengenDays, visitedPlaces };
 }

@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { ArrowLeftIcon, ChevronDownIcon } from './icons';
 import PrintReport from './PrintReport';
+import WorldMap from './WorldMap';
 import './Dashboard.css';
 
 const SCHENGEN_COUNTRIES = new Set([
@@ -75,7 +76,7 @@ function formatDate(dateStr) {
   });
 }
 
-function PhysicsTimeline({ startIdx, endIdx, extendedDays, sliderMax, onStartChange, onEndChange, overallPressure }) {
+function PhysicsTimeline({ startIdx, endIdx, extendedDays, sliderMax, onStartChange, onEndChange, overallPressure, tabMode }) {
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
 
@@ -108,13 +109,16 @@ function PhysicsTimeline({ startIdx, endIdx, extendedDays, sliderMax, onStartCha
     };
   }
 
-  const lockRef    = useRef({ left: false, right: true });
+  const lockRef    = useRef(tabMode === 'world' ? { left: false, right: false } : { left: true, right: true });
   const cbRef      = useRef({ onStartChange, onEndChange });
   const pressureRef = useRef(overallPressure);
   const colRef     = useRef({ ar: 79, ag: 140, ab: 255 });
 
   useEffect(() => { cbRef.current = { onStartChange, onEndChange }; }, [onStartChange, onEndChange]);
   useEffect(() => { pressureRef.current = overallPressure; }, [overallPressure]);
+  useEffect(() => {
+    lockRef.current = tabMode === 'world' ? { left: false, right: false } : { left: true, right: true };
+  }, [tabMode]);
 
   // Sync when preset fires a large jump from outside
   useEffect(() => {
@@ -605,9 +609,8 @@ function findBestFEIEStart(days) {
 }
 
 export default function Dashboard({ data, onReset }) {
-  const { days, countryNames = {} } = data;
+  const { days, countryNames = {}, visitedPlaces = [] } = data;
   const [tab, setTab] = useState('schengen');
-  const hasFEIEAutoRef = useRef(false);
 
   const defaultStart = Math.max(0, days.length - 180);
   const [startIdx, setStartIdx] = useState(defaultStart);
@@ -626,16 +629,20 @@ export default function Dashboard({ data, onReset }) {
 
   const sliderMax = extendedDays.length - 1;
 
-  // Auto-detect best FEIE window on first switch to FEIE tab
+  // Tab-switch: snap to correct window per mode
   useEffect(() => {
-    if (tab === 'feie' && !hasFEIEAutoRef.current) {
-      hasFEIEAutoRef.current = true;
+    if (tab === 'schengen') {
+      const end = days.length - 1;
+      setEndIdx(end);
+      setStartIdx(Math.max(0, end - 179));
+    } else if (tab === 'feie') {
       const bestStart = findBestFEIEStart(days);
-      const bestEnd = Math.min(bestStart + 364, days.length - 1);
       setStartIdx(bestStart);
-      setEndIdx(bestEnd);
+      setEndIdx(Math.min(bestStart + 364, days.length - 1));
     }
-  }, [tab, days]);
+    // world: no auto-snap, user controls freely
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
 
   function applyPreset(n) {
     const ns = Math.max(0, endIdx - n + 1);
@@ -673,6 +680,11 @@ export default function Dashboard({ data, onReset }) {
     [extendedDays, startIdx, endIdx]
   );
   const todayIdx = days.length - 1;
+  const worldCountries = useMemo(
+    () => new Set(visibleDays.flatMap(d => d.countries)),
+    [visibleDays]
+  );
+  const windowDates = useMemo(() => visibleDays.map(d => d.date), [visibleDays]);
   const windowSize = endIdx - startIdx + 1;
 
   const handleStartChange = useCallback((newIdx) => { setStartIdx(newIdx); }, []);
@@ -902,12 +914,19 @@ export default function Dashboard({ data, onReset }) {
         </>
       )}
       {tab === 'world' && (
-        <div className="status-bar-wrap">
-          <div className="status-bar-labels">
-            <span style={{ color: 'var(--accent2)' }}>{totalWorldDays} days abroad</span>
-            <span className="status-bar-remain">{legendEntries.length} {legendEntries.length === 1 ? 'country' : 'countries'} visited</span>
+        <>
+          <div className="status-bar-wrap">
+            <div className="status-bar-labels">
+              <span style={{ color: 'var(--accent2)' }}>{totalWorldDays} days abroad</span>
+              <span className="status-bar-remain">{legendEntries.length} {legendEntries.length === 1 ? 'country' : 'countries'} visited</span>
+            </div>
           </div>
-        </div>
+          <WorldMap
+            visitedCountries={worldCountries}
+            visitedPlaces={visitedPlaces}
+            windowDates={windowDates}
+          />
+        </>
       )}
 
 
@@ -916,13 +935,15 @@ export default function Dashboard({ data, onReset }) {
         <SectionHeader title="Slider Range" open={sectionOpen.dateRange} onToggle={() => toggleSection('dateRange')} />
         {sectionOpen.dateRange && (
           <div className="date-range-wrap">
-            <div className="range-preset-row">
-              {[30, 90, 180].map(n => (
-                <button key={n} className="range-preset-btn" onClick={() => applyPreset(n)}>
-                  {n}d
-                </button>
-              ))}
-            </div>
+            {tab === 'world' && (
+              <div className="range-preset-row">
+                {[30, 90, 180].map(n => (
+                  <button key={n} className="range-preset-btn" onClick={() => applyPreset(n)}>
+                    {n}d
+                  </button>
+                ))}
+              </div>
+            )}
             {/* Date endpoints */}
             <div className="timeline-date-row">
               <div className="timeline-date-block">
@@ -944,8 +965,13 @@ export default function Dashboard({ data, onReset }) {
               onStartChange={handleStartChange}
               onEndChange={handleEndChange}
               overallPressure={overallPressure}
+              tabMode={tab}
             />
-            <div className="range-hint">spin to scroll · presets change range width</div>
+            <div className="range-hint">
+              {tab === 'world'
+                ? 'spin to scroll · drag bars to resize window'
+                : 'spin to scroll · window locked to tab'}
+            </div>
           </div>
         )}
       </div>
