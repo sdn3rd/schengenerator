@@ -75,7 +75,7 @@ function formatDate(dateStr) {
   });
 }
 
-function PhysicsTimeline({ startIdx, endIdx, extendedDays, sliderMax, onStartChange, onEndChange, schengenPressure }) {
+function PhysicsTimeline({ startIdx, endIdx, extendedDays, sliderMax, onStartChange, onEndChange, overallPressure }) {
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
 
@@ -107,11 +107,11 @@ function PhysicsTimeline({ startIdx, endIdx, extendedDays, sliderMax, onStartCha
 
   const lockRef    = useRef({ left: false, right: true });
   const cbRef      = useRef({ onStartChange, onEndChange });
-  const pressureRef = useRef(schengenPressure);
+  const pressureRef = useRef(overallPressure);
   const colRef     = useRef({ ar: 79, ag: 140, ab: 255 });
 
   useEffect(() => { cbRef.current = { onStartChange, onEndChange }; }, [onStartChange, onEndChange]);
-  useEffect(() => { pressureRef.current = schengenPressure; }, [schengenPressure]);
+  useEffect(() => { pressureRef.current = overallPressure; }, [overallPressure]);
 
   // Sync when preset fires a large jump from outside
   useEffect(() => {
@@ -254,8 +254,19 @@ function PhysicsTimeline({ startIdx, endIdx, extendedDays, sliderMax, onStartCha
         ctx.fillRect(lbX, 0, rbX - lbX, baseline);
       }
 
-      // Ticks — magnetic stretch near EITHER bar, colorized by Schengen pressure
-      const pressure = pressureRef.current;
+      // Uniform tick color based on overall Schengen pressure for the window
+      const p = pressureRef.current;
+      let tr, tg, tb, pulseAlphaScale = 1;
+      if (p > 1) {
+        // Over the 90-day limit — all ticks pulse red
+        tr = 196; tg = 35; tb = 68;
+        pulseAlphaScale = 0.3 + 0.7 * pulse;
+      } else if (p > 0.05) {
+        [tr, tg, tb] = lerpCol(p); // green → amber → red gradient
+      } else {
+        tr = ar; tg = ag; tb = ab; // accent (default blue)
+      }
+
       const visRange = Math.min(Math.ceil(W / pxDay) + 4, 800);
       const d0 = Math.floor(ph.pos - visRange / 2);
       const d1 = Math.ceil(ph.pos + visRange / 2);
@@ -270,7 +281,7 @@ function PhysicsTimeline({ startIdx, endIdx, extendedDays, sliderMax, onStartCha
         const isYear  = isMonth && mo === 1;
         const isWeek  = d % 7 === 1;
 
-        // Magnetic stretch: peaks at each bar, radius = 40% of half-window in pixels
+        // Magnetic stretch: peaks at each bar
         const magRadius = Math.max(40, (rbX - lbX) * 0.45);
         const minDist = Math.min(Math.abs(x - lbX), Math.abs(x - rbX));
         const t   = Math.max(0, 1 - minDist / magRadius);
@@ -278,21 +289,8 @@ function PhysicsTimeline({ startIdx, endIdx, extendedDays, sliderMax, onStartCha
 
         const baseH = isYear ? 32 : isMonth ? 18 : isWeek ? 7 : 3;
         const tickH = (baseH + mag * 65) * dpr;
-        const baseAlpha = isMonth ? 0.22 + mag * 0.78 : 0.07 + mag * 0.55;
-
-        const p = pressure && day < pressure.length ? pressure[day] : 0;
-        let tr = ar, tg = ag, tb = ab, alpha = baseAlpha, lw = (isYear ? 2.5 : isMonth ? 1.8 : 0.8) * dpr;
-
-        if (p > 1) {
-          // Over the 90-day limit — pulse red
-          tr = 196; tg = 35; tb = 68;
-          alpha = baseAlpha * (0.3 + 0.7 * pulse);
-          lw = (isYear ? 3 : isMonth ? 2.2 : 1.1) * dpr;
-        } else if (p > 0.05) {
-          // Normal gradient: green (0) → amber (0.67) → red (1)
-          const [cr, cg, cb] = lerpCol(p);
-          tr = cr; tg = cg; tb = cb;
-        }
+        const alpha = (isMonth ? 0.22 + mag * 0.78 : 0.07 + mag * 0.55) * pulseAlphaScale;
+        const lw    = (p > 1 ? (isYear ? 3 : isMonth ? 2.2 : 1.1) : (isYear ? 2.5 : isMonth ? 1.8 : 0.8)) * dpr;
 
         ctx.strokeStyle = `rgba(${tr},${tg},${tb},${alpha})`;
         ctx.lineWidth = lw;
@@ -302,7 +300,7 @@ function PhysicsTimeline({ startIdx, endIdx, extendedDays, sliderMax, onStartCha
         ctx.stroke();
 
         if (isMonth && tickH > 12 * dpr) {
-          const ta = Math.min(1, (tickH / dpr - 8) / 16) * (0.3 + mag * 0.7) * (p > 1 ? (0.3 + 0.7 * pulse) : 1);
+          const ta = Math.min(1, (tickH / dpr - 8) / 16) * (0.3 + mag * 0.7) * pulseAlphaScale;
           if (ta > 0.05) {
             ctx.fillStyle = `rgba(${tr},${tg},${tb},${ta})`;
             ctx.font = `${isYear ? '700' : '500'} ${(isYear ? 12 : 10) * dpr}px system-ui,sans-serif`;
@@ -613,19 +611,9 @@ export default function Dashboard({ data, onReset }) {
   const todayIdx = days.length - 1;
   const windowSize = endIdx - startIdx + 1;
 
-  const schengenPressure = useMemo(() => {
-    const pressure = new Float32Array(extendedDays.length);
-    let count = 0;
-    const ring = [];
-    for (let i = 0; i < extendedDays.length; i++) {
-      const sch = extendedDays[i].countries.some(c => SCHENGEN_COUNTRIES.has(c)) ? 1 : 0;
-      ring.push(sch);
-      count += sch;
-      if (ring.length > 180) count -= ring.shift();
-      pressure[i] = count / 90; // >1 means over the 90-day limit
-    }
-    return pressure;
-  }, [extendedDays]);
+  // Single pressure value for the whole timeline: count in rolling 180-day window / 90
+  // >1 means over the limit
+  const overallPressure = schengenProjection.count / 90;
 
   const handleStartChange = useCallback((newIdx) => { setStartIdx(newIdx); }, []);
   const handleEndChange   = useCallback((newIdx) => { setEndIdx(newIdx); }, []);
@@ -892,7 +880,7 @@ export default function Dashboard({ data, onReset }) {
               sliderMax={sliderMax}
               onStartChange={handleStartChange}
               onEndChange={handleEndChange}
-              schengenPressure={schengenPressure}
+              overallPressure={overallPressure}
             />
             <div className="range-hint">spin to scroll · presets change range width</div>
           </div>
