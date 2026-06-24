@@ -100,6 +100,9 @@ function PhysicsTimeline({ startIdx, endIdx, extendedDays, sliderMax, onStartCha
       lastT: 0,
       lastVelPx: 0,
       dragPxDay: 1,
+      pxDaySmooth: 0,   // 0 = uninitialised, set on first RAF frame
+      winLabelAlpha: 0, // fades in when window size changes, out when stable
+      lastWindowDays: 0,
       lastStart: startIdx,
       lastEnd:   endIdx,
     };
@@ -238,7 +241,12 @@ function PhysicsTimeline({ startIdx, endIdx, extendedDays, sliderMax, onStartCha
       // Dynamic scale: bars always span ~80% of canvas regardless of window size.
       // W is in physical pixels (already includes dpr).
       const windowDays = Math.max(2, ph.rbOff - ph.lbOff);
-      const pxDay = (W * 0.80) / windowDays;
+      const targetPxDay = (W * 0.80) / windowDays;
+      if (ph.pxDaySmooth < 2) ph.pxDaySmooth = targetPxDay;
+      ph.pxDaySmooth += (targetPxDay - ph.pxDaySmooth) * Math.min(1, 10 * dt);
+      const pxDay = ph.pxDaySmooth;
+      // Speed-blur: fade ticks when spinning fast
+      const speedFade = Math.max(0.15, 1 - Math.abs(ph.posVel) / 80);
 
       const lbX = centerX + ph.lbOff * pxDay;
       const rbX = centerX + ph.rbOff * pxDay;
@@ -289,7 +297,7 @@ function PhysicsTimeline({ startIdx, endIdx, extendedDays, sliderMax, onStartCha
 
         const baseH = isYear ? 32 : isMonth ? 18 : isWeek ? 7 : 3;
         const tickH = (baseH + mag * 65) * dpr;
-        const alpha = (isMonth ? 0.22 + mag * 0.78 : 0.07 + mag * 0.55) * pulseAlphaScale;
+        const alpha = (isMonth ? 0.22 + mag * 0.78 : 0.07 + mag * 0.55) * pulseAlphaScale * speedFade;
         const lw    = (p > 1 ? (isYear ? 3 : isMonth ? 2.2 : 1.1) : (isYear ? 2.5 : isMonth ? 1.8 : 0.8)) * dpr;
 
         ctx.strokeStyle = `rgba(${tr},${tg},${tb},${alpha})`;
@@ -311,16 +319,38 @@ function PhysicsTimeline({ startIdx, endIdx, extendedDays, sliderMax, onStartCha
         }
       }
 
+      // Window-size label — fades in when days change, fades out when stable
+      const roundedDays = Math.round(windowDays);
+      if (roundedDays !== ph.lastWindowDays) {
+        ph.winLabelAlpha = 1;
+        ph.lastWindowDays = roundedDays;
+      } else {
+        ph.winLabelAlpha *= Math.exp(-1.8 * dt);
+      }
+      if (ph.winLabelAlpha > 0.01) {
+        ctx.fillStyle = `rgba(${ar},${ag},${ab},${ph.winLabelAlpha * 0.65})`;
+        ctx.font = `600 ${11 * dpr}px system-ui,sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(`${roundedDays} days`, centerX, baseline - 10 * dpr);
+      }
+
       // Draw vertical bar + LOCK/FREE label
-      function drawBar(bx, isLocked) {
+      function drawBar(bx, isLocked, side) {
+        const isActive = ph.dragTarget === side;
+        const breathe = 0.5 + 0.5 * Math.sin(now / 2000 * Math.PI);
         const br = isLocked ? 255 : ar;
         const bg = isLocked ? 180 : ag;
         const bb = isLocked ? 50  : ab;
+        ctx.save();
+        ctx.shadowColor = `rgba(${br},${bg},${bb},${isActive ? 0.85 : 0.2 + breathe * 0.15})`;
+        ctx.shadowBlur = (isActive ? 20 : 5 + breathe * 5) * dpr;
         ctx.strokeStyle = `rgba(${br},${bg},${bb},0.9)`;
-        ctx.lineWidth = 2.5 * dpr;
+        ctx.lineWidth = (isActive ? 3 : 2.5) * dpr;
         ctx.beginPath(); ctx.moveTo(bx, 0); ctx.lineTo(bx, baseline); ctx.stroke();
         ctx.fillStyle = `rgba(${br},${bg},${bb},1)`;
         ctx.beginPath(); ctx.arc(bx, baseline, 5 * dpr, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
         ctx.fillStyle = `rgba(${br},${bg},${bb},0.55)`;
         ctx.font = `700 ${8 * dpr}px system-ui,sans-serif`;
         ctx.textAlign = 'center';
@@ -328,8 +358,8 @@ function PhysicsTimeline({ startIdx, endIdx, extendedDays, sliderMax, onStartCha
         ctx.fillText(isLocked ? 'LOCK' : 'FREE', bx, baseline + 10 * dpr);
       }
 
-      drawBar(lbX, lk.left);
-      drawBar(rbX, lk.right);
+      drawBar(lbX, lk.left, 'left');
+      drawBar(rbX, lk.right, 'right');
 
       rafId = requestAnimationFrame(loop);
     }
@@ -389,9 +419,11 @@ function PhysicsTimeline({ startIdx, endIdx, extendedDays, sliderMax, onStartCha
       if (target === 'spin') {
         ph.pos = ph.dragStartPos - dx_days;
       } else if (target === 'left' && !lk.left) {
-        ph.lbOff = Math.min(ph.dragStartLb + dx_days, ph.rbOff - 1);
+        const newLb = ph.dragStartLb + dx_days;
+        ph.lbOff = Math.max(ph.rbOff - 365, Math.min(newLb, ph.rbOff - 1));
       } else if (target === 'right' && !lk.right) {
-        ph.rbOff = Math.max(ph.dragStartRb + dx_days, ph.lbOff + 1);
+        const newRb = ph.dragStartRb + dx_days;
+        ph.rbOff = Math.min(ph.lbOff + 365, Math.max(newRb, ph.lbOff + 1));
       }
 
       ph.lastX = x; ph.lastT = now;
@@ -552,9 +584,29 @@ function SectionHeader({ title, open, onToggle, note }) {
   );
 }
 
+// O(n) sliding window: find 365-day period in `days` with most non-US days
+function findBestFEIEStart(days) {
+  const n = days.length;
+  if (n < 1) return 0;
+  const win = 365;
+  let count = 0;
+  const limit = Math.min(win, n);
+  for (let i = 0; i < limit; i++) {
+    if (!days[i].countries.includes('US')) count++;
+  }
+  let best = count, bestStart = 0;
+  for (let i = win; i < n; i++) {
+    if (!days[i].countries.includes('US')) count++;
+    if (!days[i - win].countries.includes('US')) count--;
+    if (count > best) { best = count; bestStart = i - win + 1; }
+  }
+  return bestStart;
+}
+
 export default function Dashboard({ data, onReset }) {
   const { days, countryNames = {} } = data;
   const [tab, setTab] = useState('schengen');
+  const hasFEIEAutoRef = useRef(false);
 
   const defaultStart = Math.max(0, days.length - 180);
   const [startIdx, setStartIdx] = useState(defaultStart);
@@ -572,6 +624,17 @@ export default function Dashboard({ data, onReset }) {
   }, [days]);
 
   const sliderMax = extendedDays.length - 1;
+
+  // Auto-detect best FEIE window on first switch to FEIE tab
+  useEffect(() => {
+    if (tab === 'feie' && !hasFEIEAutoRef.current) {
+      hasFEIEAutoRef.current = true;
+      const bestStart = findBestFEIEStart(days);
+      const bestEnd = Math.min(bestStart + 364, days.length - 1);
+      setStartIdx(bestStart);
+      setEndIdx(bestEnd);
+    }
+  }, [tab, days]);
 
   function applyPreset(n) {
     const ns = Math.max(0, endIdx - n + 1);
