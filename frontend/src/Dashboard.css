@@ -152,28 +152,65 @@
 }
 
 /* Date range slider */
-.date-range-end-label {
+.range-preset-row {
   display: flex;
-  align-items: center;
   gap: 6px;
 }
 
-.range-lock-badge {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+.range-preset-btn {
+  padding: 3px 10px;
   border-radius: 10px;
-  padding: 1px 7px;
-  letter-spacing: 0.01em;
+  border: 1.5px solid var(--surface2);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s;
 }
 
-.range-lock-hint {
+.range-preset-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.date-thumb-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: color 0.15s;
+}
+
+.date-thumb-label.is-locked {
+  color: var(--accent);
+}
+
+.thumb-lock-pip {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+.range-hint {
   font-size: 11px;
-  font-weight: 400;
   color: var(--text-muted);
-  opacity: 0.6;
+  opacity: 0.5;
+  text-align: center;
+}
+
+.slider-thumb.thumb-locked::-webkit-slider-thumb {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent), 0 1px 5px rgba(0,0,0,0.2);
+  cursor: default;
+}
+
+.slider-thumb.thumb-locked::-moz-range-thumb {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+  cursor: default;
 }
 
 .date-range-wrap {

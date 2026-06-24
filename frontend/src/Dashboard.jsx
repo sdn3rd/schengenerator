@@ -196,12 +196,11 @@ export default function Dashboard({ data, onReset }) {
   const defaultStart = Math.max(0, days.length - 180);
   const [startIdx, setStartIdx] = useState(defaultStart);
   const [endIdx, setEndIdx] = useState(days.length - 1);
-  const [rangeMode, setRangeMode] = useState('free'); // 'free' | 'fixed'
-  const [fixedDays, setFixedDays] = useState(180);
+  // null = both free; 'start' = left thumb pinned; 'end' = right thumb pinned
+  const [lockedThumb, setLockedThumb] = useState(null);
 
   // Extend the days array 366 days into the future with empty entries so the
   // slider can project forward past the last recorded travel date.
-  const todayIdx = days.length - 1;
   const extendedDays = useMemo(() => {
     if (!days.length) return days;
     const lastDate = days[days.length - 1].date;
@@ -215,34 +214,27 @@ export default function Dashboard({ data, onReset }) {
   const sliderMax = extendedDays.length - 1;
   const pctOf = idx => `${(idx / sliderMax) * 100}%`;
 
-  const activeEndIdx = rangeMode === 'fixed'
-    ? Math.min(sliderMax, startIdx + fixedDays - 1)
-    : endIdx;
-
   const handleStartChange = e => {
-    const v = Number(e.target.value);
-    if (rangeMode === 'fixed') {
-      setStartIdx(Math.min(v, sliderMax - fixedDays + 1));
-    } else {
-      setStartIdx(Math.min(v, endIdx - 29));
-    }
+    if (lockedThumb === 'start') return;
+    setStartIdx(Math.min(Number(e.target.value), endIdx - 1));
   };
   const handleEndChange = e => {
-    const v = Number(e.target.value);
-    if (rangeMode === 'fixed') {
-      setStartIdx(Math.max(0, Math.min(v - fixedDays + 1, sliderMax - fixedDays + 1)));
-    } else {
-      setEndIdx(Math.max(v, startIdx + 29));
-    }
+    if (lockedThumb === 'end') return;
+    setEndIdx(Math.max(Number(e.target.value), startIdx + 1));
   };
 
-  function handleThumbDoubleClick() {
-    if (rangeMode === 'free') {
-      setRangeMode('fixed');
-      setFixedDays(endIdx - startIdx + 1);
+  function handleStartDoubleClick() {
+    setLockedThumb(prev => prev === 'start' ? null : 'start');
+  }
+  function handleEndDoubleClick() {
+    setLockedThumb(prev => prev === 'end' ? null : 'end');
+  }
+
+  function applyPreset(n) {
+    if (lockedThumb === 'start') {
+      setEndIdx(Math.min(sliderMax, startIdx + n - 1));
     } else {
-      setEndIdx(activeEndIdx);
-      setRangeMode('free');
+      setStartIdx(Math.max(0, endIdx - n + 1));
     }
   }
 
@@ -273,10 +265,10 @@ export default function Dashboard({ data, onReset }) {
   }
 
   const visibleDays = useMemo(
-    () => extendedDays.slice(startIdx, activeEndIdx + 1),
-    [extendedDays, startIdx, activeEndIdx]
+    () => extendedDays.slice(startIdx, endIdx + 1),
+    [extendedDays, startIdx, endIdx]
   );
-  const windowSize = activeEndIdx - startIdx + 1;
+  const windowSize = endIdx - startIdx + 1;
 
   const tabDays = useMemo(() => {
     if (tab === 'schengen') {
@@ -361,11 +353,11 @@ export default function Dashboard({ data, onReset }) {
   );
 
   const realTodayStr = days[days.length - 1]?.date;
-  const evalDateStr = extendedDays[activeEndIdx]?.date;
+  const evalDateStr = extendedDays[endIdx]?.date;
   const isHistorical = evalDateStr && realTodayStr && evalDateStr !== realTodayStr;
 
   const feieStats = useMemo(() => {
-    const periodWindow = extendedDays.slice(startIdx, activeEndIdx + 1);
+    const periodWindow = extendedDays.slice(startIdx, endIdx + 1);
     const windowLen = periodWindow.length;
     const outsideDates = periodWindow.filter(d => !d.countries.includes('US')).map(d => d.date);
     const usaCount = windowLen - outsideDates.length;
@@ -391,11 +383,11 @@ export default function Dashboard({ data, onReset }) {
       qualifyingDate, daysUntilQualifying,
       windowLen, startDateStr,
     };
-  }, [extendedDays, startIdx, activeEndIdx, evalDateStr]);
+  }, [extendedDays, startIdx, endIdx, evalDateStr]);
 
   const schengenProjection = useMemo(() => {
-    const startEval = Math.max(0, activeEndIdx - 179);
-    const sWindow = extendedDays.slice(startEval, activeEndIdx + 1);
+    const startEval = Math.max(0, endIdx - 179);
+    const sWindow = extendedDays.slice(startEval, endIdx + 1);
     const schengenDates = sWindow
       .filter(d => d.countries.some(c => SCHENGEN_COUNTRIES.has(c)))
       .map(d => d.date);
@@ -414,7 +406,7 @@ export default function Dashboard({ data, onReset }) {
       earliestReentryDays = daysBetweenStr(evalDateStr, earliestReentryDate);
     }
     return { count, fullResetDate, fullResetDays, earliestReentryDate, earliestReentryDays };
-  }, [extendedDays, activeEndIdx, evalDateStr]);
+  }, [extendedDays, endIdx, evalDateStr]);
 
   if (showPrint) return <PrintReport data={data} onClose={() => setShowPrint(false)} />;
 
@@ -513,31 +505,38 @@ export default function Dashboard({ data, onReset }) {
         <SectionHeader title="Slider Range" open={sectionOpen.dateRange} onToggle={() => toggleSection('dateRange')} />
         {sectionOpen.dateRange && (
           <div className="date-range-wrap">
+            <div className="range-preset-row">
+              {[30, 90, 180].map(n => (
+                <button key={n} className="range-preset-btn" onClick={() => applyPreset(n)}>
+                  {n}d
+                </button>
+              ))}
+            </div>
             <div className="date-range-labels">
-              <span>{formatDate(extendedDays[startIdx]?.date)}</span>
-              <span className="date-range-end-label">
-                {formatDate(extendedDays[activeEndIdx]?.date)}
-                {rangeMode === 'fixed'
-                  ? <span className="range-lock-badge">locked · {fixedDays}d</span>
-                  : <span className="range-lock-hint">double-click thumb to lock</span>
-                }
+              <span className={`date-thumb-label${lockedThumb === 'start' ? ' is-locked' : ''}`}>
+                {lockedThumb === 'start' && <span className="thumb-lock-pip" />}
+                {formatDate(extendedDays[startIdx]?.date)}
+              </span>
+              <span className={`date-thumb-label${lockedThumb === 'end' ? ' is-locked' : ''}`}>
+                {formatDate(extendedDays[endIdx]?.date)}
+                {lockedThumb === 'end' && <span className="thumb-lock-pip" />}
               </span>
             </div>
             <div className="dual-slider">
               <div className="dual-slider-track" />
-              <div className="dual-slider-fill" style={{ left: pctOf(startIdx), right: `${100 - (activeEndIdx / sliderMax) * 100}%` }} />
+              <div className="dual-slider-fill" style={{ left: pctOf(startIdx), right: `${100 - (endIdx / sliderMax) * 100}%` }} />
               <input
                 type="range" min={0} max={sliderMax} value={startIdx}
-                onChange={handleStartChange} onDoubleClick={handleThumbDoubleClick}
-                className="slider-thumb"
+                onChange={handleStartChange} onDoubleClick={handleStartDoubleClick}
+                className={`slider-thumb${lockedThumb === 'start' ? ' thumb-locked' : ''}`}
               />
               <input
-                type="range" min={0} max={sliderMax}
-                value={rangeMode === 'fixed' ? activeEndIdx : endIdx}
-                onChange={handleEndChange} onDoubleClick={handleThumbDoubleClick}
-                className="slider-thumb"
+                type="range" min={0} max={sliderMax} value={endIdx}
+                onChange={handleEndChange} onDoubleClick={handleEndDoubleClick}
+                className={`slider-thumb${lockedThumb === 'end' ? ' thumb-locked' : ''}`}
               />
             </div>
+            <div className="range-hint">double-click a thumb to lock that side</div>
           </div>
         )}
       </div>
