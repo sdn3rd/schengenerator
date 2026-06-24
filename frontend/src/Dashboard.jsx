@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { ArrowLeftIcon, ChevronDownIcon } from './icons';
 import PrintReport from './PrintReport';
 import './Dashboard.css';
@@ -36,6 +36,7 @@ const MONTH_NAMES = [
   'January','February','March','April','May','June',
   'July','August','September','October','November','December',
 ];
+const MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const DOW = ['Mo','Tu','We','Th','Fr','Sa','Su'];
 
 const DEFAULT_OPEN = { dateRange: true, countries: true, calendar: true };
@@ -72,6 +73,211 @@ function formatDate(dateStr) {
   return new Date(y, m - 1, d).toLocaleDateString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric',
   });
+}
+
+function PhysicsTimeline({ centerIdx, windowSize, extendedDays, sliderMax, onCenterChange }) {
+  const canvasRef = useRef(null);
+  const wrapRef = useRef(null);
+  const physRef = useRef({ pos: centerIdx, vel: 0, dragging: false, startX: 0, startPos: 0, lastX: 0, lastT: 0, dragVel: 0 });
+  const colRef = useRef({ ar: 79, ag: 140, ab: 255 });
+  const wsRef = useRef(windowSize);
+  const lastNotifiedRef = useRef(Math.round(centerIdx));
+
+  useEffect(() => { wsRef.current = windowSize; }, [windowSize]);
+
+  // Snap to externally-driven center changes (presets)
+  useEffect(() => {
+    if (Math.round(physRef.current.pos) !== centerIdx) {
+      physRef.current.pos = centerIdx;
+      physRef.current.vel = 0;
+    }
+  }, [centerIdx]);
+
+  // Read accent color from CSS once on mount
+  useEffect(() => {
+    try {
+      const v = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+      if (/^#[0-9a-f]{6}/i.test(v)) {
+        colRef.current = { ar: parseInt(v.slice(1,3),16), ag: parseInt(v.slice(3,5),16), ab: parseInt(v.slice(5,7),16) };
+      }
+    } catch {}
+  }, []);
+
+  // HiDPI canvas resize
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const wrap = wrapRef.current;
+    const H_CSS = 150;
+    function resize() {
+      const dpr = window.devicePixelRatio || 1;
+      const w = wrap.getBoundingClientRect().width;
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(H_CSS * dpr);
+      canvas.style.width = `${w}px`;
+      canvas.style.height = `${H_CSS}px`;
+    }
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(wrap);
+    return () => ro.disconnect();
+  }, []);
+
+  // Main RAF: physics simulation + canvas draw
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    let rafId;
+    let lastTime = performance.now();
+    const PX_PER_DAY = 10; // css px per day
+
+    function loop(now) {
+      const dt = Math.min((now - lastTime) / 1000, 0.05);
+      lastTime = now;
+      const ph = physRef.current;
+      const dpr = window.devicePixelRatio || 1;
+      const { ar, ag, ab } = colRef.current;
+
+      if (!ph.dragging) {
+        ph.vel *= Math.exp(-6 * dt);
+        const target = Math.round(ph.pos);
+        ph.vel += (target - ph.pos) * 160 * dt;
+        ph.pos += ph.vel * dt;
+        ph.pos = Math.max(0, Math.min(sliderMax, ph.pos));
+        const rounded = Math.round(ph.pos);
+        if (rounded !== lastNotifiedRef.current && Math.abs(ph.vel) < 1.5) {
+          lastNotifiedRef.current = rounded;
+          onCenterChange(rounded);
+        }
+      }
+
+      const ctx = canvas.getContext('2d');
+      const W = canvas.width;
+      const H = canvas.height;
+      ctx.clearRect(0, 0, W, H);
+
+      const centerX = W / 2;
+      const baseline = H * 0.6;
+      const pxDay = PX_PER_DAY * dpr;
+
+      // Faint baseline rule
+      ctx.strokeStyle = `rgba(${ar},${ag},${ab},0.1)`;
+      ctx.lineWidth = dpr;
+      ctx.beginPath(); ctx.moveTo(0, baseline); ctx.lineTo(W, baseline); ctx.stroke();
+
+      // Window band
+      const halfW = (wsRef.current / 2) * pxDay;
+      ctx.fillStyle = `rgba(${ar},${ag},${ab},0.07)`;
+      ctx.fillRect(centerX - halfW, 0, halfW * 2, baseline);
+
+      // Window edge dashes
+      ctx.strokeStyle = `rgba(${ar},${ag},${ab},0.3)`;
+      ctx.lineWidth = 1.5 * dpr;
+      ctx.setLineDash([4*dpr, 4*dpr]);
+      ctx.beginPath();
+      ctx.moveTo(centerX - halfW, 0); ctx.lineTo(centerX - halfW, baseline);
+      ctx.moveTo(centerX + halfW, 0); ctx.lineTo(centerX + halfW, baseline);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Ticks — stretch upward magnetically near center
+      const visRange = Math.ceil(W / pxDay) + 4;
+      const d0 = Math.floor(ph.pos - visRange / 2);
+      const d1 = Math.ceil(ph.pos + visRange / 2);
+
+      for (let day = d0; day <= d1; day++) {
+        if (day < 0 || day >= extendedDays.length) continue;
+        const x = centerX + (day - ph.pos) * pxDay;
+        const ds = extendedDays[day].date;
+        const m = parseInt(ds.slice(5, 7));
+        const d = parseInt(ds.slice(8, 10));
+        const isMonth = d === 1;
+        const isYear = isMonth && m === 1;
+        const isWeek = d % 7 === 1;
+
+        const dist = Math.abs(x - centerX);
+        const t = Math.max(0, 1 - dist / (W * 0.3));
+        const mag = t * t * t;
+
+        const baseH = isYear ? 32 : isMonth ? 18 : isWeek ? 7 : 3;
+        const tickH = (baseH + mag * 62) * dpr;
+        const alpha = isMonth ? 0.25 + mag * 0.75 : 0.08 + mag * 0.5;
+
+        ctx.strokeStyle = `rgba(${ar},${ag},${ab},${alpha})`;
+        ctx.lineWidth = (isYear ? 2.5 : isMonth ? 1.8 : 0.8) * dpr;
+        ctx.beginPath();
+        ctx.moveTo(x, baseline);
+        ctx.lineTo(x, baseline - tickH);
+        ctx.stroke();
+
+        if (isMonth && tickH > 12 * dpr) {
+          const ta = Math.min(1, (tickH / dpr - 8) / 16) * (0.3 + mag * 0.7);
+          if (ta > 0.05) {
+            ctx.fillStyle = `rgba(${ar},${ag},${ab},${ta})`;
+            ctx.font = `${isYear ? '700' : '500'} ${(isYear ? 12 : 10) * dpr}px system-ui,sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.fillText(isYear ? ds.slice(0,4) : MONTH_ABBR[m-1], x, baseline + 5*dpr);
+          }
+        }
+      }
+
+      // Center cursor
+      ctx.strokeStyle = `rgba(${ar},${ag},${ab},0.85)`;
+      ctx.lineWidth = 2 * dpr;
+      ctx.beginPath(); ctx.moveTo(centerX, 0); ctx.lineTo(centerX, baseline); ctx.stroke();
+      ctx.fillStyle = `rgba(${ar},${ag},${ab},1)`;
+      ctx.beginPath(); ctx.arc(centerX, baseline, 5*dpr, 0, Math.PI*2); ctx.fill();
+
+      rafId = requestAnimationFrame(loop);
+    }
+
+    rafId = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafId);
+  }, [extendedDays, sliderMax, onCenterChange]);
+
+  // Pointer events — drag to spin, release with momentum
+  const handlePointerDown = useCallback((e) => {
+    e.preventDefault();
+    const ph = physRef.current;
+    const dpr = window.devicePixelRatio || 1;
+    ph.dragging = true;
+    ph.vel = 0;
+    ph.startX = e.clientX;
+    ph.startPos = ph.pos;
+    ph.lastX = e.clientX;
+    ph.lastT = performance.now();
+    ph.dragVel = 0;
+
+    const onMove = (ev) => {
+      const x = ev.clientX;
+      const now = performance.now();
+      const moveDt = Math.max(0.001, (now - ph.lastT) / 1000);
+      ph.dragVel = -(x - ph.lastX) / (10 * dpr) / moveDt;
+      ph.lastX = x; ph.lastT = now;
+      ph.pos = Math.max(0, Math.min(sliderMax, ph.startPos - (x - ph.startX) / (10 * dpr)));
+      lastNotifiedRef.current = Math.round(ph.pos);
+      onCenterChange(Math.round(ph.pos));
+    };
+
+    const onUp = () => {
+      ph.dragging = false;
+      ph.vel = ph.dragVel * 0.6;
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+    };
+
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+  }, [sliderMax, onCenterChange]);
+
+  return (
+    <div ref={wrapRef} className="physics-timeline-wrap">
+      <canvas
+        ref={canvasRef}
+        onPointerDown={handlePointerDown}
+        style={{ touchAction: 'none', cursor: 'grab', display: 'block' }}
+      />
+    </div>
+  );
 }
 
 function StatusBar({ total, windowSize, projection, asOf, isHistorical }) {
@@ -209,6 +415,7 @@ export default function Dashboard({ data, onReset }) {
   // null=free, 'start'=left pinned, 'end'=right pinned, 'both'=drag fill to slide
   const [lockedThumb, setLockedThumb] = useState(null);
   const sliderRef = useRef(null);
+  const windowSizeRef = useRef(0);
 
   // Extend the days array 366 days into the future with empty entries so the
   // slider can project forward past the last recorded travel date.
@@ -392,56 +599,18 @@ export default function Dashboard({ data, onReset }) {
     [extendedDays, startIdx, endIdx]
   );
   const windowSize = endIdx - startIdx + 1;
-  const barWidthPct = (windowSize / (sliderMax + 1)) * 100;
-  const barLeftPct = (100 - barWidthPct) / 2;
+  const centerIdx = Math.round((startIdx + endIdx) / 2);
 
-  // SVG suspension bridge constants (viewBox 0 0 1000 150)
-  const B_LX = barLeftPct * 10;
-  const B_RX = (100 - barLeftPct) * 10;
-  const B_TY = 18;   // tower top y
-  const B_DY = 92;   // deck y
-  const B_CY = 118;  // cable bezier control point y (below deck → dramatic sag)
+  // Keep windowSizeRef in sync for the PhysicsTimeline callback closure
+  useEffect(() => { windowSizeRef.current = windowSize; }, [windowSize]);
 
-  const bridgeHangers = useMemo(() => {
-    const n = 14;
-    const result = [];
-    for (let i = 1; i <= n; i++) {
-      const t = i / (n + 1);
-      const x = B_LX + t * (B_RX - B_LX);
-      const cy = (1-t)*(1-t)*B_TY + 2*(1-t)*t*B_CY + t*t*B_TY;
-      if (cy < B_DY) result.push({ x, cy });
-    }
-    return result;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [barLeftPct]);
-
-  const bridgeTicks = useMemo(() => {
-    const start = extendedDays[startIdx]?.date;
-    const end = extendedDays[endIdx]?.date;
-    if (!start || !end) return [];
-    const startMs = new Date(start + 'T00:00:00Z').getTime();
-    const endMs = new Date(end + 'T00:00:00Z').getTime();
-    const totalMs = endMs - startMs;
-    if (totalMs <= 0) return [];
-    const MA = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    const result = [];
-    const cur = new Date(startMs);
-    cur.setUTCDate(1);
-    if (new Date(startMs).getUTCDate() !== 1) cur.setUTCMonth(cur.getUTCMonth() + 1);
-    while (cur.getTime() <= endMs) {
-      const frac = (cur.getTime() - startMs) / totalMs;
-      const x = B_LX + frac * (B_RX - B_LX);
-      const m = cur.getUTCMonth();
-      const y = cur.getUTCFullYear();
-      result.push({ x, label: m === 0 ? String(y) : MA[m], major: m === 0 });
-      cur.setUTCMonth(cur.getUTCMonth() + 1);
-    }
-    // thin out if too many ticks
-    if (result.length > 24) return result.filter(t => t.major);
-    if (result.length > 12) return result.filter((t, i) => t.major || i % 3 === 0);
-    return result;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [extendedDays, startIdx, endIdx, barLeftPct]);
+  const handleCenterChange = useCallback((newCenter) => {
+    const ws = windowSizeRef.current;
+    const half = Math.floor(ws / 2);
+    const ns = Math.max(0, Math.min(newCenter - half, sliderMax - ws + 1));
+    setStartIdx(ns);
+    setEndIdx(ns + ws - 1);
+  }, [sliderMax]);
 
   const tabDays = useMemo(() => {
     if (tab === 'schengen') {
@@ -685,126 +854,27 @@ export default function Dashboard({ data, onReset }) {
                 </button>
               ))}
             </div>
-            <div className="bridge-wrap" ref={sliderRef}>
-              {/* Big date labels — slide through values as bar scrolls */}
-              <div className="bridge-date-label" style={{ left: `${barLeftPct}%` }}>
-                <span className={`bridge-md${lockedThumb === 'start' || lockedThumb === 'both' ? ' locked' : ''}`}>
-                  {formatBridgeDate(extendedDays[startIdx]?.date).md}
-                </span>
-                <span className="bridge-yr">
-                  {formatBridgeDate(extendedDays[startIdx]?.date).y}
-                </span>
+            {/* Date endpoints */}
+            <div className="timeline-date-row">
+              <div className="timeline-date-block">
+                <span className="bridge-md">{formatBridgeDate(extendedDays[startIdx]?.date).md}</span>
+                <span className="bridge-yr">{formatBridgeDate(extendedDays[startIdx]?.date).y}</span>
               </div>
-              <div className="bridge-date-label" style={{ left: `${100 - barLeftPct}%` }}>
-                <span className={`bridge-md${lockedThumb === 'end' || lockedThumb === 'both' ? ' locked' : ''}`}>
-                  {formatBridgeDate(extendedDays[endIdx]?.date).md}
-                </span>
-                <span className="bridge-yr">
-                  {formatBridgeDate(extendedDays[endIdx]?.date).y}
-                </span>
-              </div>
-
-              {/* SVG suspension bridge */}
-              <svg
-                className="bridge-svg"
-                viewBox="0 0 1000 150"
-                preserveAspectRatio="none"
-                width="100%"
-                height="150"
-              >
-                <defs>
-                  <filter id="bridge-glow" x="-20%" y="-20%" width="140%" height="140%">
-                    <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur" />
-                    <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-                  </filter>
-                </defs>
-
-                {/* Full-width ruler track */}
-                <line x1={0} y1={B_DY} x2={1000} y2={B_DY}
-                  stroke="var(--surface2)" strokeWidth={2} />
-
-                {/* Left tower */}
-                <line x1={B_LX} y1={B_TY} x2={B_LX} y2={B_DY + 4}
-                  stroke="var(--accent)" strokeWidth={5} strokeLinecap="round"
-                  filter="url(#bridge-glow)" />
-                {/* Right tower */}
-                <line x1={B_RX} y1={B_TY} x2={B_RX} y2={B_DY + 4}
-                  stroke="var(--accent)" strokeWidth={5} strokeLinecap="round"
-                  filter="url(#bridge-glow)" />
-
-                {/* Main suspension cable */}
-                <path
-                  d={`M ${B_LX},${B_TY} Q ${(B_LX + B_RX) / 2},${B_CY} ${B_RX},${B_TY}`}
-                  stroke="var(--accent)" strokeWidth={3} fill="none" opacity={0.85}
-                  filter="url(#bridge-glow)"
-                />
-
-                {/* Vertical hangers */}
-                {bridgeHangers.map(({ x, cy }, i) => (
-                  <line key={i} x1={x} y1={cy} x2={x} y2={B_DY}
-                    stroke="var(--accent)" strokeWidth={1.5} opacity={0.35} />
-                ))}
-
-                {/* Road deck (draggable) */}
-                <rect
-                  x={B_LX} y={B_DY - 3} width={Math.max(0, B_RX - B_LX)} height={10}
-                  rx={5} fill="var(--accent)"
-                  className="bridge-deck"
-                  onMouseDown={handleBarMouseDown}
-                  onTouchStart={handleBarTouchStart}
-                  filter="url(#bridge-glow)"
-                />
-
-                {/* Tower caps — drag to resize, tap to lock */}
-                <circle
-                  cx={B_LX} cy={B_TY} r={9}
-                  fill={lockedThumb === 'start' || lockedThumb === 'both' ? 'var(--accent)' : 'var(--surface)'}
-                  stroke="var(--accent)" strokeWidth={2.5}
-                  className="bridge-cap"
-                  onMouseDown={(e) => handleTriangleMouseDown('start', e)}
-                  onTouchStart={(e) => handleTriangleTouchStart('start', e)}
-                  filter={lockedThumb === 'start' || lockedThumb === 'both' ? 'url(#bridge-glow)' : undefined}
-                />
-                <circle
-                  cx={B_RX} cy={B_TY} r={9}
-                  fill={lockedThumb === 'end' || lockedThumb === 'both' ? 'var(--accent)' : 'var(--surface)'}
-                  stroke="var(--accent)" strokeWidth={2.5}
-                  className="bridge-cap"
-                  onMouseDown={(e) => handleTriangleMouseDown('end', e)}
-                  onTouchStart={(e) => handleTriangleTouchStart('end', e)}
-                  filter={lockedThumb === 'end' || lockedThumb === 'both' ? 'url(#bridge-glow)' : undefined}
-                />
-
-                {/* Ruler ticks + month labels */}
-                {bridgeTicks.map(({ x, label, major }, i) => (
-                  <g key={i}>
-                    <line
-                      x1={x} y1={B_DY + 10} x2={x} y2={B_DY + (major ? 26 : 18)}
-                      stroke="var(--text-muted)" strokeWidth={major ? 2 : 1} opacity={0.5}
-                    />
-                    <text
-                      x={x} y={B_DY + (major ? 44 : 36)}
-                      textAnchor="middle"
-                      style={{
-                        fontSize: major ? '12px' : '10px',
-                        fontFamily: 'system-ui, -apple-system, sans-serif',
-                        fontWeight: major ? 700 : 500,
-                        fill: 'var(--text-muted)',
-                        opacity: major ? 0.7 : 0.45,
-                      }}
-                    >
-                      {label}
-                    </text>
-                  </g>
-                ))}
-              </svg>
-            </div>
-            <div className="slider-bottom-labels">
-              <span>{formatDate(extendedDays[startIdx]?.date)}</span>
               <span className="slider-window-size">{windowSize}d</span>
-              <span>{formatDate(extendedDays[endIdx]?.date)}</span>
+              <div className="timeline-date-block timeline-date-right">
+                <span className="bridge-md">{formatBridgeDate(extendedDays[endIdx]?.date).md}</span>
+                <span className="bridge-yr">{formatBridgeDate(extendedDays[endIdx]?.date).y}</span>
+              </div>
             </div>
-            <div className="range-hint">drag deck to scroll · drag ● to resize · tap ● to lock</div>
+            {/* Physics spinnable timeline */}
+            <PhysicsTimeline
+              centerIdx={centerIdx}
+              windowSize={windowSize}
+              extendedDays={extendedDays}
+              sliderMax={sliderMax}
+              onCenterChange={handleCenterChange}
+            />
+            <div className="range-hint">spin to scroll · presets change range width</div>
           </div>
         )}
       </div>

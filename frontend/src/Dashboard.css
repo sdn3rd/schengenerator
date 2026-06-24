@@ -203,7 +203,7 @@
   text-align: center;
 }
 
-/* Suspension bridge slider */
+/* Physics spinnable timeline */
 .date-range-wrap {
   padding: 18px 22px;
   display: flex;
@@ -211,23 +211,21 @@
   gap: 12px;
 }
 
-.bridge-wrap {
-  position: relative;
-  padding-top: 68px; /* room for big date labels above SVG */
+.timeline-date-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
-/* Big date labels floating above the tower positions */
-.bridge-date-label {
-  position: absolute;
-  top: 0;
-  transform: translateX(-50%);
-  text-align: center;
-  pointer-events: none;
-  user-select: none;
+.timeline-date-block {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  z-index: 2;
+  align-items: flex-start;
+}
+
+.timeline-date-right {
+  align-items: flex-end;
+  text-align: right;
 }
 
 .bridge-md {
@@ -237,11 +235,6 @@
   color: var(--text);
   line-height: 1.15;
   white-space: nowrap;
-  transition: color 0.12s;
-}
-
-.bridge-md.locked {
-  color: var(--accent);
 }
 
 .bridge-yr {
@@ -253,28 +246,11 @@
   white-space: nowrap;
 }
 
-/* The SVG itself */
-.bridge-svg {
-  display: block;
-  overflow: visible;
-}
-
-/* SVG interactive elements */
-.bridge-deck {
-  cursor: grab;
-  pointer-events: all;
-}
-.bridge-deck:active {
-  cursor: grabbing;
-}
-
-.bridge-cap {
-  cursor: ew-resize;
-  pointer-events: all;
-  transition: r 0.1s;
-}
-.bridge-cap:hover {
-  opacity: 0.85;
+.physics-timeline-wrap {
+  width: 100%;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface2);
 }
 
 .slider-bottom-labels {
@@ -286,8 +262,8 @@
 }
 
 .slider-window-size {
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 800;
   color: var(--accent);
 }
 
