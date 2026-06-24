@@ -99,6 +99,7 @@ function PhysicsTimeline({ startIdx, endIdx, extendedDays, sliderMax, onStartCha
       lastX: 0,
       lastT: 0,
       lastVelPx: 0,
+      dragPxDay: 1,
       lastStart: startIdx,
       lastEnd:   endIdx,
     };
@@ -157,7 +158,6 @@ function PhysicsTimeline({ startIdx, endIdx, extendedDays, sliderMax, onStartCha
     const canvas = canvasRef.current;
     let rafId;
     let lastTime = performance.now();
-    const PX_PER_DAY = 10;
     const MIN_GAP_DAYS = 1;
 
     const colorStops = [
@@ -233,7 +233,10 @@ function PhysicsTimeline({ startIdx, endIdx, extendedDays, sliderMax, onStartCha
 
       const centerX = W / 2;
       const baseline = H * 0.55;
-      const pxDay = PX_PER_DAY * dpr;
+      // Dynamic scale: bars always span ~80% of canvas regardless of window size.
+      // W is in physical pixels (already includes dpr).
+      const windowDays = Math.max(2, ph.rbOff - ph.lbOff);
+      const pxDay = (W * 0.80) / windowDays;
 
       const lbX = centerX + ph.lbOff * pxDay;
       const rbX = centerX + ph.rbOff * pxDay;
@@ -251,7 +254,7 @@ function PhysicsTimeline({ startIdx, endIdx, extendedDays, sliderMax, onStartCha
 
       // Ticks — magnetic stretch near EITHER bar, colorized by Schengen pressure
       const pressure = pressureRef.current;
-      const visRange = Math.ceil(W / pxDay) + 4;
+      const visRange = Math.min(Math.ceil(W / pxDay) + 4, 800);
       const d0 = Math.floor(ph.pos - visRange / 2);
       const d1 = Math.ceil(ph.pos + visRange / 2);
 
@@ -265,9 +268,10 @@ function PhysicsTimeline({ startIdx, endIdx, extendedDays, sliderMax, onStartCha
         const isYear  = isMonth && mo === 1;
         const isWeek  = d % 7 === 1;
 
-        // Proximity to the nearest bar
+        // Magnetic stretch: peaks at each bar, radius = 40% of half-window in pixels
+        const magRadius = Math.max(40, (rbX - lbX) * 0.45);
         const minDist = Math.min(Math.abs(x - lbX), Math.abs(x - rbX));
-        const t   = Math.max(0, 1 - minDist / (W * 0.22));
+        const t   = Math.max(0, 1 - minDist / magRadius);
         const mag = t * t * t;
 
         const baseH = isYear ? 32 : isMonth ? 18 : isWeek ? 7 : 3;
@@ -332,30 +336,31 @@ function PhysicsTimeline({ startIdx, endIdx, extendedDays, sliderMax, onStartCha
     const dpr = window.devicePixelRatio || 1;
     const ph  = phRef.current;
     const lk  = lockRef.current;
-    const PX_PER_DAY = 10;
 
-    const rect  = canvas.getBoundingClientRect();
-    const clickX = (e.clientX - rect.left) * dpr;
-    const W     = canvas.width;
-    const pxDay = PX_PER_DAY * dpr;
-    const lbX   = W / 2 + ph.lbOff * pxDay;
-    const rbX   = W / 2 + ph.rbOff * pxDay;
+    const rect   = canvas.getBoundingClientRect();
+    const clickX = (e.clientX - rect.left) * dpr; // canvas physical px
+    const W      = canvas.width;
+    // Same dynamic scale as RAF loop
+    const pxDay  = (W * 0.80) / Math.max(2, ph.rbOff - ph.lbOff);
+    const lbX    = W / 2 + ph.lbOff * pxDay;
+    const rbX    = W / 2 + ph.rbOff * pxDay;
 
-    const dL = Math.abs(clickX - lbX);
-    const dR = Math.abs(clickX - rbX);
-    const HIT = 22 * dpr;
+    const dL  = Math.abs(clickX - lbX);
+    const dR  = Math.abs(clickX - rbX);
+    const HIT = 28 * dpr; // slightly generous hit zone
 
     let target = 'spin';
     if (dL < HIT && dL <= dR) target = 'left';
     else if (dR < HIT)         target = 'right';
 
-    ph.dragTarget  = target;
-    ph.dragStartX  = e.clientX;
+    ph.dragTarget   = target;
+    ph.dragStartX   = e.clientX;
     ph.dragStartPos = ph.pos;
-    ph.dragStartLb = ph.lbOff;
-    ph.dragStartRb = ph.rbOff;
-    ph.lastX = e.clientX;
-    ph.lastT = performance.now();
+    ph.dragStartLb  = ph.lbOff;
+    ph.dragStartRb  = ph.rbOff;
+    ph.dragPxDay    = pxDay; // capture scale at drag start
+    ph.lastX   = e.clientX;
+    ph.lastT   = performance.now();
     ph.lastVelPx = 0;
     if (target === 'spin')  ph.posVel = 0;
     if (target === 'left')  ph.lbVel  = 0;
@@ -364,20 +369,21 @@ function PhysicsTimeline({ startIdx, endIdx, extendedDays, sliderMax, onStartCha
     let dragged = false;
 
     const onMove = (ev) => {
-      if (Math.abs(ev.clientX - ph.dragStartX) > 4) dragged = true;
+      if (Math.abs(ev.clientX - ph.dragStartX) > 3) dragged = true;
       if (!dragged) return;
-      const x   = ev.clientX;
-      const now = performance.now();
+      const x      = ev.clientX;
+      const now    = performance.now();
       const moveDt = Math.max(0.001, (now - ph.lastT) / 1000);
-      ph.lastVelPx = (x - ph.lastX) / moveDt; // px/s, positive = right
-      const dx = x - ph.dragStartX;
+      // velocity in canvas physical px/s
+      ph.lastVelPx = (x - ph.lastX) * dpr / moveDt;
+      const dx_days = (x - ph.dragStartX) * dpr / ph.dragPxDay; // CSS px → days
 
       if (target === 'spin') {
-        ph.pos = ph.dragStartPos - dx / PX_PER_DAY;
+        ph.pos = ph.dragStartPos - dx_days;
       } else if (target === 'left' && !lk.left) {
-        ph.lbOff = Math.min(ph.dragStartLb + dx / PX_PER_DAY, ph.rbOff - 1);
+        ph.lbOff = Math.min(ph.dragStartLb + dx_days, ph.rbOff - 1);
       } else if (target === 'right' && !lk.right) {
-        ph.rbOff = Math.max(ph.dragStartRb + dx / PX_PER_DAY, ph.lbOff + 1);
+        ph.rbOff = Math.max(ph.dragStartRb + dx_days, ph.lbOff + 1);
       }
 
       ph.lastX = x; ph.lastT = now;
@@ -388,10 +394,10 @@ function PhysicsTimeline({ startIdx, endIdx, extendedDays, sliderMax, onStartCha
         if (target === 'left')  lockRef.current = { ...lockRef.current, left:  !lockRef.current.left  };
         if (target === 'right') lockRef.current = { ...lockRef.current, right: !lockRef.current.right };
       } else {
-        const velDays = ph.lastVelPx / PX_PER_DAY;
-        if (target === 'spin')  ph.posVel = -velDays * 0.6;
-        if (target === 'left'  && !lk.left)  ph.lbVel = velDays * 0.35;
-        if (target === 'right' && !lk.right) ph.rbVel = velDays * 0.35;
+        const velDays = ph.lastVelPx / ph.dragPxDay; // days/s
+        if (target === 'spin')                       ph.posVel = -velDays * 0.6;
+        if (target === 'left'  && !lk.left)          ph.lbVel  =  velDays * 0.35;
+        if (target === 'right' && !lk.right)         ph.rbVel  =  velDays * 0.35;
       }
       ph.dragTarget = null;
       document.removeEventListener('pointermove', onMove);
