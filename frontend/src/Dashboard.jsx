@@ -575,36 +575,35 @@ export default function Dashboard({ data, onReset }) {
                 </button>
               ))}
             </div>
-            <div className="slider-with-labels" ref={sliderRef}>
-              {/* Date labels float above their thumb position */}
-              <div className="thumb-label-start" style={{ left: pctOf(startIdx) }}>
+            <div className="slider-section" ref={sliderRef}>
+              {/* Start marker: sliding date → line → ▼ triangle (tap to lock) */}
+              <div className="slider-end-marker" style={{ left: pctOf(startIdx) }}>
+                <div className={`end-date${lockedThumb === 'start' || lockedThumb === 'both' ? ' locked' : ''}`}>
+                  {formatDate(extendedDays[startIdx]?.date)}
+                </div>
+                <div className="end-line" />
                 <button
-                  className={`lock-toggle${lockedThumb === 'start' || lockedThumb === 'both' ? ' locked' : ''}`}
+                  className={`end-triangle-btn${lockedThumb === 'start' || lockedThumb === 'both' ? ' locked' : ''}`}
                   onClick={handleStartLockToggle}
                   title={lockedThumb === 'start' || lockedThumb === 'both' ? 'Unlock start' : 'Lock start'}
                 />
-                <span className={lockedThumb === 'start' || lockedThumb === 'both' ? 'label-locked' : ''}>
-                  {formatDate(extendedDays[startIdx]?.date)}
-                </span>
               </div>
-              <div className="thumb-label-end" style={{ left: pctOf(endIdx) }}>
-                <span className={lockedThumb === 'end' || lockedThumb === 'both' ? 'label-locked' : ''}>
+              {/* End marker: sliding date → line → ▼ triangle (tap to lock) */}
+              <div className="slider-end-marker" style={{ left: pctOf(endIdx) }}>
+                <div className={`end-date${lockedThumb === 'end' || lockedThumb === 'both' ? ' locked' : ''}`}>
                   {formatDate(extendedDays[endIdx]?.date)}
-                </span>
+                </div>
+                <div className="end-line" />
                 <button
-                  className={`lock-toggle${lockedThumb === 'end' || lockedThumb === 'both' ? ' locked' : ''}`}
+                  className={`end-triangle-btn${lockedThumb === 'end' || lockedThumb === 'both' ? ' locked' : ''}`}
                   onClick={handleEndLockToggle}
                   title={lockedThumb === 'end' || lockedThumb === 'both' ? 'Unlock end' : 'Lock end'}
                 />
               </div>
-              {/* Track */}
+              {/* Bar — floats centered below the markers */}
               <div className="dual-slider">
                 <div className="dual-slider-track" />
                 <div className="dual-slider-fill" style={{ left: pctOf(startIdx), right: `${100 - (endIdx / sliderMax) * 100}%` }} />
-                {/* Visible triangles at thumb positions */}
-                <div className={`thumb-triangle${lockedThumb === 'start' || lockedThumb === 'both' ? ' locked' : ''}`} style={{ left: pctOf(startIdx) }} />
-                <div className={`thumb-triangle${lockedThumb === 'end' || lockedThumb === 'both' ? ' locked' : ''}`} style={{ left: pctOf(endIdx) }} />
-                {/* Invisible native inputs for drag handling */}
                 <input type="range" min={0} max={sliderMax} value={startIdx} onChange={handleStartChange} className="slider-thumb-hidden" />
                 <input type="range" min={0} max={sliderMax} value={endIdx} onChange={handleEndChange} className="slider-thumb-hidden" />
                 {lockedThumb === 'both' && (
@@ -612,10 +611,16 @@ export default function Dashboard({ data, onReset }) {
                 )}
               </div>
             </div>
+            {/* Fixed summary below the bar */}
+            <div className="slider-bottom-labels">
+              <span>{formatDate(extendedDays[startIdx]?.date)}</span>
+              <span className="slider-window-size">{windowSize}d</span>
+              <span>{formatDate(extendedDays[endIdx]?.date)}</span>
+            </div>
             <div className="range-hint">
               {lockedThumb === 'both'
-                ? 'drag the bar · tap ○ to unlock a side'
-                : 'tap ○ to lock a side · lock both to drag'}
+                ? 'drag the bar · tap ▼ to unlock a side'
+                : 'tap ▼ to lock a side · lock both to drag'}
             </div>
           </div>
         )}
