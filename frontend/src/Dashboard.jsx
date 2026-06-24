@@ -611,10 +611,6 @@ export default function Dashboard({ data, onReset }) {
   const todayIdx = days.length - 1;
   const windowSize = endIdx - startIdx + 1;
 
-  // Single pressure value for the whole timeline: count in rolling 180-day window / 90
-  // >1 means over the limit
-  const overallPressure = schengenProjection.count / 90;
-
   const handleStartChange = useCallback((newIdx) => { setStartIdx(newIdx); }, []);
   const handleEndChange   = useCallback((newIdx) => { setEndIdx(newIdx); }, []);
 
@@ -755,6 +751,9 @@ export default function Dashboard({ data, onReset }) {
     }
     return { count, fullResetDate, fullResetDays, earliestReentryDate, earliestReentryDays };
   }, [extendedDays, endIdx, evalDateStr]);
+
+  // Must be after schengenProjection — >1 means over the 90-day limit
+  const overallPressure = schengenProjection.count / 90;
 
   if (showPrint) return <PrintReport data={data} onClose={() => setShowPrint(false)} />;
 
