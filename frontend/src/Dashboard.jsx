@@ -127,6 +127,7 @@ function PhysicsTimeline({ startIdx, endIdx, extendedDays, sliderMax, onStartCha
       ph.lbOff  = startIdx - center;
       ph.rbOff  = endIdx   - center;
       ph.posVel = ph.lbVel = ph.rbVel = 0;
+      ph.pxDaySmooth = 0; // force scale reinit on next RAF frame — avoids bars flying off-screen
     }
   }, [startIdx, endIdx]);
 
