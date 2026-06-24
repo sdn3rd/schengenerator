@@ -40,7 +40,7 @@ const MONTH_NAMES = [
 const MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const DOW = ['Mo','Tu','We','Th','Fr','Sa','Su'];
 
-const DEFAULT_OPEN = { dateRange: true, countries: true, calendar: true };
+const DEFAULT_OPEN = { countries: true, calendar: true };
 
 function addDaysToStr(dateStr, n) {
   const [y, m, d] = dateStr.split('-').map(Number);
@@ -464,115 +464,68 @@ function PhysicsTimeline({ startIdx, endIdx, extendedDays, sliderMax, onStartCha
   );
 }
 
-function StatusBar({ total, windowSize, projection, asOf, isHistorical }) {
+function SchengenCard({ total, projection, asOf, isHistorical }) {
   const pct = Math.min((total / 90) * 100, 100);
-  const color = total >= 90 ? '#c42344' : total >= 75 ? '#cc5214' : 'var(--text2)';
-  const limitLabel = total >= 90
-    ? 'Limit reached'
-    : total >= 75
-    ? `${90 - total} days left — caution`
-    : `${90 - total} days remaining`;
-  const label = windowSize === 180 ? limitLabel : `in ${windowSize}-day window`;
+  const color = total >= 90 ? '#c42344' : total >= 75 ? '#cc5214' : '#267a42';
+  const remaining = 90 - total;
+  const proj = projection;
+  const projDate = proj?.earliestReentryDate ?? proj?.fullResetDate ?? null;
+  const projDays = proj?.earliestReentryDate ? proj.earliestReentryDays : proj?.fullResetDays ?? null;
+  const projLabel = proj?.earliestReentryDate ? 'Earliest re-entry' : 'Full allowance restored';
+
   return (
-    <div className="status-bar-wrap">
-      <div className="status-bar-track">
-        <div className="status-bar-fill" style={{ width: `${pct}%`, background: color }} />
+    <div className="result-card" style={{ '--rc-accent': color }}>
+      <div className="rc-bar-track">
+        <div className="rc-bar-fill" style={{ width: `${pct}%` }} />
       </div>
-      <div className="status-bar-labels">
-        <span style={{ color }}>{total} / 90 Schengen days used</span>
-        <span className="status-bar-remain" style={{ color }}>{label}</span>
+      <div className="rc-row">
+        <div className="rc-main">
+          <span className="rc-num">{total}</span>
+          <span className="rc-denom"> / 90</span>
+          <span className="rc-label"> Schengen days used</span>
+        </div>
+        <div className="rc-status">
+          {total >= 90 ? 'Limit reached' : total >= 75 ? `${remaining} left — caution` : `${remaining} remaining`}
+        </div>
       </div>
-      {isHistorical && (
-        <div className="asof-tag">as of {formatDate(asOf)}</div>
-      )}
-      {projection && projection.count > 0 && (
-        <div className="proj-sub">
-          {projection.earliestReentryDate && (
-            <div className="proj-row">
-              <strong>Earliest re-entry:</strong>{' '}
-              {formatDate(projection.earliestReentryDate)}{' '}
-              <span className="proj-days">({projection.earliestReentryDays}d)</span>
-            </div>
-          )}
-          <div className="proj-row">
-            <strong>Full 90-day allowance restored:</strong>{' '}
-            {formatDate(projection.fullResetDate)}{' '}
-            <span className="proj-days">({projection.fullResetDays}d)</span>
-          </div>
-          <div className="proj-note">
-            <strong>90/180 rule:</strong> max 90 days in any rolling 180-day window.
-            Projections assume you leave the Schengen Area today and don't return.
-          </div>
+      {projDate && proj.count > 0 && (
+        <div className="rc-proj-row">
+          <div className="rc-proj-label">{projLabel}{isHistorical ? ` (as of ${formatDate(asOf)})` : ''}</div>
+          <div className="rc-proj-date">{formatDate(projDate)}</div>
+          {projDays != null && <div className="rc-proj-count">{projDays}d away</div>}
         </div>
       )}
+      <div className="rc-note">90/180 rule: max 90 Schengen days in any rolling 180-day window.</div>
     </div>
   );
 }
 
-function FeieStatusBar({ stats, asOf }) {
+function FeieCard({ stats, asOf, isHistorical }) {
   const { usaCount, nonUsaCount, qualifies, qualifyingDate, daysUntilQualifying, windowLen, startDateStr } = stats;
   const pct = Math.min((nonUsaCount / 330) * 100, 100);
-  const color = qualifies
-    ? '#267a42'
-    : pct >= 75
-    ? '#b46f09'
-    : 'var(--text2)';
-  return (
-    <div className="status-bar-wrap feie-bar">
-      <div className="status-bar-track">
-        <div className="status-bar-fill" style={{ width: `${pct}%`, background: color }} />
-      </div>
-      <div className="status-bar-labels">
-        <span style={{ color }}>{nonUsaCount} / 330 outside-USA days</span>
-        <span className="status-bar-remain" style={{ color }}>
-          {qualifies ? 'Qualifies ✓' : `${daysUntilQualifying} more needed`}
-        </span>
-      </div>
-      <div className="asof-tag">
-        Period: {formatDate(startDateStr)} → {formatDate(asOf)} ({windowLen}d, {usaCount} in US)
-      </div>
-      <div className="proj-sub">
-        <div className="proj-row">
-          <strong>{qualifies ? 'Hit 330 outside-USA days on:' : 'Projected qualification:'}</strong>{' '}
-          {formatDate(qualifyingDate)}
-          {!qualifies && (
-            <> <span className="proj-days">({daysUntilQualifying}d from {formatDate(asOf)})</span></>
-          )}
-        </div>
-        <div className="proj-note">
-          <strong>FEIE Physical Presence Test:</strong> 330+ days outside the USA in any
-          365-day window. Tally counts outside-USA days from your selected start date
-          ({formatDate(startDateStr)}); projection assumes continuous absence from the USA
-          after {formatDate(asOf)}. Adjust the slider to set period start and evaluation date.
-        </div>
-      </div>
-    </div>
-  );
-}
+  const color = qualifies ? '#267a42' : pct >= 75 ? '#b46f09' : '#4f8cff';
 
-function ProjectionCard({ title, date, daysAway, color, qualified, qualifiedLabel, note }) {
-  const accent = color ?? '#267a42';
-  if (qualified) {
-    return (
-      <div className="projection-card qualified" style={{ '--proj-accent': accent }}>
-        <div className="proj-card-title">{title}</div>
-        <div className="proj-card-status">{qualifiedLabel ?? '✓ Currently qualifying'}</div>
-        {note && <div className="proj-card-note">{note}</div>}
-      </div>
-    );
-  }
-  if (!date) return null;
   return (
-    <div className="projection-card" style={{ '--proj-accent': accent }}>
-      <div className="proj-card-title">{title}</div>
-      <div className="proj-card-date">{formatDate(date)}</div>
-      {daysAway != null && (
-        <div className="proj-card-countdown">
-          <span className="proj-card-num">{daysAway}</span>
-          <span className="proj-card-unit">{daysAway === 1 ? 'day away' : 'days away'}</span>
+    <div className="result-card" style={{ '--rc-accent': color }}>
+      <div className="rc-bar-track">
+        <div className="rc-bar-fill" style={{ width: `${pct}%` }} />
+      </div>
+      <div className="rc-row">
+        <div className="rc-main">
+          <span className="rc-num">{nonUsaCount}</span>
+          <span className="rc-denom"> / 330</span>
+          <span className="rc-label"> outside-USA days</span>
         </div>
-      )}
-      {note && <div className="proj-card-note">{note}</div>}
+        <div className="rc-status">{qualifies ? 'Qualifies ✓' : `${daysUntilQualifying} more needed`}</div>
+      </div>
+      <div className="rc-proj-row">
+        <div className="rc-proj-label">{qualifies ? 'Hit 330 on' : 'Projected qualification'}{isHistorical ? ` (as of ${formatDate(asOf)})` : ''}</div>
+        <div className="rc-proj-date">{formatDate(qualifyingDate)}</div>
+        {!qualifies && <div className="rc-proj-count">{daysUntilQualifying}d away</div>}
+      </div>
+      <div className="rc-note">
+        {formatDate(startDateStr)} → {formatDate(asOf)} · {windowLen}d window · {usaCount} in US · FEIE needs 330+ outside-USA days
+      </div>
     </div>
   );
 }
@@ -666,7 +619,7 @@ export default function Dashboard({ data, onReset }) {
     } else {
       setSnapshot({ ...sectionOpen });
       setSnapshotDirty(false);
-      setSectionOpen({ dateRange: false, countries: false, calendar: false });
+      setSectionOpen({ countries: false, calendar: false });
     }
   }
 
@@ -835,10 +788,18 @@ export default function Dashboard({ data, onReset }) {
 
   return (
     <div className="dashboard">
-      <div className="dash-header">
-        <div>
-          <h2 className="dash-title">Travel Activity</h2>
-          <p className="dash-sub">{windowSize} days selected</p>
+      {/* Top bar: tabs left, action buttons right */}
+      <div className="top-bar">
+        <div className="tabs">
+          <button className={`tab-btn${tab === 'schengen' ? ' active' : ''}`} onClick={() => setTab('schengen')}>
+            Schengen
+          </button>
+          <button className={`tab-btn${tab === 'feie' ? ' active' : ''}`} onClick={() => setTab('feie')}>
+            FEIE (US)
+          </button>
+          <button className={`tab-btn${tab === 'world' ? ' active' : ''}`} onClick={() => setTab('world')}>
+            World
+          </button>
         </div>
         <div className="dash-actions">
           <button className="collapse-btn" onClick={masterToggle}>
@@ -853,65 +814,17 @@ export default function Dashboard({ data, onReset }) {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="tabs">
-        <button className={`tab-btn${tab === 'schengen' ? ' active' : ''}`} onClick={() => setTab('schengen')}>
-          Schengen
-        </button>
-        <button className={`tab-btn${tab === 'feie' ? ' active' : ''}`} onClick={() => setTab('feie')}>
-          FEIE (US)
-        </button>
-        <button className={`tab-btn${tab === 'world' ? ' active' : ''}`} onClick={() => setTab('world')}>
-          World
-        </button>
-      </div>
-
-      {/* Status bar — always visible */}
+      {/* Results — tab-specific content */}
       {tab === 'schengen' && (
-        <>
-          <StatusBar
-            total={totalSchengenDays}
-            windowSize={windowSize}
-            projection={schengenProjection}
-            asOf={evalDateStr}
-            isHistorical={isHistorical}
-          />
-          {schengenProjection.count > 0 && (
-            schengenProjection.earliestReentryDate ? (
-              <ProjectionCard
-                title={`Projected earliest Schengen re-entry${isHistorical ? ` (as of ${formatDate(evalDateStr)})` : ''}`}
-                date={schengenProjection.earliestReentryDate}
-                daysAway={schengenProjection.earliestReentryDays}
-                color="#c42344"
-                note={`First date the rolling 180-day window drops back below the 90-day limit, assuming you leave Schengen ${isHistorical ? 'on ' + formatDate(evalDateStr) : 'today'} and don't return.`}
-              />
-            ) : (
-              <ProjectionCard
-                title={`Full 90-day Schengen allowance restored${isHistorical ? ` (as of ${formatDate(evalDateStr)})` : ''}`}
-                date={schengenProjection.fullResetDate}
-                daysAway={schengenProjection.fullResetDays}
-                color="#267a42"
-                note={`Date the rolling 180-day window contains zero Schengen days again, assuming you leave ${isHistorical ? formatDate(evalDateStr) : 'today'} and don't return.`}
-              />
-            )
-          )}
-        </>
+        <SchengenCard
+          total={totalSchengenDays}
+          projection={schengenProjection}
+          asOf={evalDateStr}
+          isHistorical={isHistorical}
+        />
       )}
       {tab === 'feie' && (
-        <>
-          <FeieStatusBar stats={feieStats} asOf={evalDateStr} isHistorical={isHistorical} />
-          <ProjectionCard
-            title={feieStats.qualifies ? 'FEIE qualified — 330 days reached' : 'Projected FEIE qualification date'}
-            date={feieStats.qualifyingDate}
-            daysAway={feieStats.qualifies ? null : feieStats.daysUntilQualifying}
-            color={feieStats.qualifies ? '#267a42' : '#cc5214'}
-            note={`Counting outside-USA days from ${formatDate(feieStats.startDateStr)}. ${
-              feieStats.qualifies
-                ? `You hit 330 outside-USA days on this date.`
-                : `Need ${330 - feieStats.nonUsaCount} more outside-USA days, assuming continuous absence from the USA after ${formatDate(evalDateStr)}.`
-            }`}
-          />
-        </>
+        <FeieCard stats={feieStats} asOf={evalDateStr} isHistorical={isHistorical} />
       )}
       {tab === 'world' && (
         <>
@@ -929,51 +842,43 @@ export default function Dashboard({ data, onReset }) {
         </>
       )}
 
-
-      {/* Slider range — collapsible */}
-      <div className="section-wrap">
-        <SectionHeader title="Slider Range" open={sectionOpen.dateRange} onToggle={() => toggleSection('dateRange')} />
-        {sectionOpen.dateRange && (
-          <div className="date-range-wrap">
-            {tab === 'world' && (
-              <div className="range-preset-row">
-                {[30, 90, 180].map(n => (
-                  <button key={n} className="range-preset-btn" onClick={() => applyPreset(n)}>
-                    {n}d
-                  </button>
-                ))}
-              </div>
-            )}
-            {/* Date endpoints */}
-            <div className="timeline-date-row">
-              <div className="timeline-date-block">
-                <span className="bridge-md">{formatBridgeDate(extendedDays[startIdx]?.date).md}</span>
-                <span className="bridge-yr">{formatBridgeDate(extendedDays[startIdx]?.date).y}</span>
-              </div>
-              <span className="slider-window-size">{windowSize}d</span>
-              <div className="timeline-date-block timeline-date-right">
-                <span className="bridge-md">{formatBridgeDate(extendedDays[endIdx]?.date).md}</span>
-                <span className="bridge-yr">{formatBridgeDate(extendedDays[endIdx]?.date).y}</span>
-              </div>
-            </div>
-            {/* Physics spinnable timeline */}
-            <PhysicsTimeline
-              startIdx={startIdx}
-              endIdx={endIdx}
-              extendedDays={extendedDays}
-              sliderMax={sliderMax}
-              onStartChange={handleStartChange}
-              onEndChange={handleEndChange}
-              overallPressure={overallPressure}
-              tabMode={tab}
-            />
-            <div className="range-hint">
-              {tab === 'world'
-                ? 'spin to scroll · drag bars to resize window'
-                : 'spin to scroll · window locked to tab'}
-            </div>
+      {/* Timeline — always visible, no collapsible wrapper */}
+      <div className="timeline-section">
+        {tab === 'world' && (
+          <div className="range-preset-row">
+            {[30, 90, 180].map(n => (
+              <button key={n} className="range-preset-btn" onClick={() => applyPreset(n)}>
+                {n}d
+              </button>
+            ))}
           </div>
         )}
+        <div className="timeline-date-row">
+          <div className="timeline-date-block">
+            <span className="bridge-md">{formatBridgeDate(extendedDays[startIdx]?.date).md}</span>
+            <span className="bridge-yr">{formatBridgeDate(extendedDays[startIdx]?.date).y}</span>
+          </div>
+          <span className="slider-window-size">{windowSize}d</span>
+          <div className="timeline-date-block timeline-date-right">
+            <span className="bridge-md">{formatBridgeDate(extendedDays[endIdx]?.date).md}</span>
+            <span className="bridge-yr">{formatBridgeDate(extendedDays[endIdx]?.date).y}</span>
+          </div>
+        </div>
+        <PhysicsTimeline
+          startIdx={startIdx}
+          endIdx={endIdx}
+          extendedDays={extendedDays}
+          sliderMax={sliderMax}
+          onStartChange={handleStartChange}
+          onEndChange={handleEndChange}
+          overallPressure={overallPressure}
+          tabMode={tab}
+        />
+        <div className="range-hint">
+          {tab === 'world'
+            ? 'spin to scroll · drag bars to resize window'
+            : 'spin to scroll · window locked to tab'}
+        </div>
       </div>
 
       {/* Countries — collapsible, compact cards above calendar */}

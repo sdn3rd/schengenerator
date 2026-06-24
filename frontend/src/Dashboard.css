@@ -4,12 +4,12 @@
   gap: 24px;
 }
 
-.dash-header {
+.top-bar {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 10px;
 }
 
 .dash-actions {
@@ -17,18 +17,6 @@
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-}
-
-.dash-title {
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.4px;
-}
-
-.dash-sub {
-  color: var(--text2);
-  font-size: 13px;
-  margin-top: 3px;
 }
 
 .reset-btn {
@@ -204,6 +192,17 @@
 }
 
 /* Physics spinnable timeline */
+.timeline-section {
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .date-range-wrap {
   padding: 18px 22px;
   display: flex;
@@ -612,6 +611,55 @@
   font-size: 15px;
 }
 .no-data small { font-size: 13px; }
+
+/* Unified result card (Schengen + FEIE) */
+.result-card {
+  background: color-mix(in srgb, var(--surface) 88%, var(--rc-accent, #4f8cff));
+  border: 1px solid color-mix(in srgb, var(--rc-accent, #4f8cff) 35%, var(--border));
+  border-left: 3px solid var(--rc-accent, #4f8cff);
+  border-radius: 14px;
+  padding: 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.rc-bar-track {
+  height: 5px;
+  background: var(--surface2);
+  border-radius: 99px;
+  overflow: hidden;
+}
+.rc-bar-fill {
+  height: 100%;
+  background: var(--rc-accent, #4f8cff);
+  border-radius: 99px;
+  transition: width 0.4s ease;
+}
+.rc-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.rc-main { display: flex; align-items: baseline; gap: 2px; }
+.rc-num { font-size: 28px; font-weight: 700; color: var(--rc-accent); letter-spacing: -0.5px; }
+.rc-denom { color: var(--text2); font-size: 14px; }
+.rc-label { color: var(--text2); font-size: 13px; margin-left: 4px; }
+.rc-status { color: var(--rc-accent); font-size: 14px; font-weight: 600; white-space: nowrap; }
+.rc-proj-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+  background: color-mix(in srgb, var(--rc-accent) 10%, transparent);
+  border-radius: 8px;
+  flex-wrap: wrap;
+}
+.rc-proj-label { color: var(--text2); font-size: 13px; flex: 1; min-width: 120px; }
+.rc-proj-date { color: var(--rc-accent); font-weight: 700; font-size: 15px; white-space: nowrap; }
+.rc-proj-count { color: var(--text2); font-size: 13px; white-space: nowrap; }
+.rc-note { color: var(--text2); font-size: 12px; line-height: 1.5; }
 
 /* World map */
 .world-map-wrap {
